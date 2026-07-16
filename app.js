@@ -111,6 +111,27 @@
     setTimeout(() => URL.revokeObjectURL(url), 15000);
   }
 
+  // On iOS Safari, <a download> on a blob: URL usually just opens the PDF in a
+  // new tab instead of saving it — the Web Share sheet ("Save to Files") is the
+  // only reliable "download" affordance there, so prefer it when available and
+  // fall back to the anchor-click download everywhere else (desktop, etc).
+  async function deliverBlob(blob, filename, mimeType) {
+    if (navigator.canShare && typeof navigator.share === "function") {
+      try {
+        const file = new File([blob], filename, { type: mimeType });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: "GlaMaterials" });
+          return "shared";
+        }
+      } catch (err) {
+        if (err && err.name === "AbortError") return "cancelled";
+        // any other share failure: fall through to a normal download
+      }
+    }
+    triggerDownloadBlob(blob, filename);
+    return "downloaded";
+  }
+
   function describeError(err) {
     const msg = (err && err.message) || "";
     if (/password/i.test(msg)) return "PDF захищений паролем — зніми захист і спробуй ще раз.";
@@ -499,8 +520,11 @@
           const pdfBytes = await buildPdfFromPages(allPages, opacity, updateExportProgress);
           const blob = new Blob([pdfBytes], { type: "application/pdf" });
           const filename = (ready[0].baseName || "glamaterials") + "_glameng.pdf";
-          triggerDownloadBlob(blob, filename);
-          await saveHistoryEntry({ name: filename, format: "pdf", pageCount: allPages.length, blob, blobName: filename, thumbSource: allPages[0] });
+          const outcome = await deliverBlob(blob, filename, "application/pdf");
+          cancelled = outcome === "cancelled";
+          if (!cancelled) {
+            await saveHistoryEntry({ name: filename, format: "pdf", pageCount: allPages.length, blob, blobName: filename, thumbSource: allPages[0] });
+          }
         } else {
           const zip = await getJSZip();
           let done = 0;
@@ -515,8 +539,11 @@
           }
           const zipBlob = await zip.generateAsync({ type: "blob" });
           const filename = `glamaterials_${ready.length}_pdf.zip`;
-          triggerDownloadBlob(zipBlob, filename);
-          await saveHistoryEntry({ name: filename, format: "pdf-zip", pageCount: total, blob: zipBlob, blobName: filename, thumbSource: ready[0].pages[0] });
+          const outcome = await deliverBlob(zipBlob, filename, "application/zip");
+          cancelled = outcome === "cancelled";
+          if (!cancelled) {
+            await saveHistoryEntry({ name: filename, format: "pdf-zip", pageCount: total, blob: zipBlob, blobName: filename, thumbSource: ready[0].pages[0] });
+          }
         }
       } else {
         const total = totalPagesOf(ready);
@@ -673,9 +700,10 @@
       dlBtn.type = "button";
       dlBtn.setAttribute("aria-label", "Завантажити ще раз");
       dlBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/></svg>';
-      dlBtn.addEventListener("click", () => {
-        triggerDownloadBlob(entry.blob, entry.blobName);
-        showToast("Завантаження почалось", "success");
+      dlBtn.addEventListener("click", async () => {
+        const mime = entry.format === "pdf" ? "application/pdf" : entry.format === "photos-zip" || entry.format === "pdf-zip" ? "application/zip" : entry.blob.type || "application/octet-stream";
+        const outcome = await deliverBlob(entry.blob, entry.blobName, mime);
+        if (outcome !== "cancelled") showToast("Завантаження почалось", "success");
       });
       const delBtn = document.createElement("button");
       delBtn.type = "button";
