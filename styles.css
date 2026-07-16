@@ -37,7 +37,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 20px;
 }
 
 .brand {
@@ -83,15 +83,6 @@ html, body {
 }
 
 .icon-btn:hover { color: var(--pink-deep); border-color: var(--pink); }
-
-.brand-tag {
-  width: 100%;
-  max-width: 640px;
-  margin: 0 0 20px;
-  color: var(--ink-soft);
-  font-size: 14px;
-  line-height: 1.5;
-}
 
 .stage {
   width: 100%;
@@ -162,13 +153,6 @@ html, body {
   margin: 0;
   color: var(--ink-soft);
   font-size: 12.5px;
-}
-
-.privacy-note {
-  margin: 16px 0 0;
-  text-align: center;
-  color: var(--ink-soft);
-  font-size: 12px;
 }
 
 /* Job list */
