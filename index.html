@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>GlaMaterials — накладання водяного знаку</title>
+<meta name="description" content="Накладіть фірмовий водяний знак GlamEng на PDF або фото за один клік. Все обробляється прямо у браузері — файли нікуди не завантажуються.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23ef7fb0%22/><text x=%2250%22 y=%2266%22 font-size=%2058%22 text-anchor=%22middle%22 font-family=%22Georgia,serif%22 fill=%22white%22>G</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">G</span>
+      <span class="brand-name">GlaMaterials</span>
+    </div>
+    <p class="brand-tag">Накладає водяний знак GlamEng на будь-який PDF чи фото — прямо у браузері</p>
+  </header>
+
+  <main class="stage">
+
+    <section id="panel-drop" class="panel panel-drop">
+      <label for="file-input" class="dropzone" id="dropzone">
+        <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" multiple hidden>
+        <svg class="dropzone-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M24 6v24m0 0 9-9m-9 9-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M8 34v4a4 4 0 0 0 4 4h24a4 4 0 0 0 4-4v-4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <p class="dropzone-title">Перетягніть файл сюди або натисніть, щоб обрати</p>
+        <p class="dropzone-sub">PDF, JPG, PNG, WEBP · декілька файлів = декілька сторінок · результат завжди PDF</p>
+      </label>
+      <p class="privacy-note">Файли обробляються локально у вашому браузері й нікуди не надсилаються.</p>
+    </section>
+
+    <section id="panel-working" class="panel panel-working hidden">
+      <div class="working-box">
+        <div class="spinner" aria-hidden="true"></div>
+        <p id="working-label">Обробка сторінки 1…</p>
+        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+      </div>
+    </section>
+
+    <section id="panel-result" class="panel panel-result hidden">
+      <div class="result-layout">
+        <div class="preview-wrap">
+          <canvas id="preview-canvas" class="preview-canvas"></canvas>
+          <span id="page-count-badge" class="page-count-badge"></span>
+        </div>
+
+        <div class="controls">
+          <div class="control-block">
+            <div class="control-label-row">
+              <label for="opacity-slider">Прозорість водяного знаку</label>
+              <span id="opacity-value">15%</span>
+            </div>
+            <input type="range" id="opacity-slider" min="0" max="50" step="1" value="15">
+          </div>
+
+          <button id="download-btn" class="btn-primary">Завантажити PDF</button>
+          <button id="reset-btn" class="btn-ghost">Обробити інший файл</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-error" class="panel panel-error hidden">
+      <p id="error-text"></p>
+      <button id="error-reset-btn" class="btn-ghost">Спробувати ще раз</button>
+    </section>
+
+  </main>
+
+  <footer class="foot">
+    <span>GlaMaterials · GlamEng</span>
+  </footer>
+</div>
+
+<script src="vendor/pdf-lib.min.js"></script>
+<script src="vendor/pdf.min.js"></script>
+<script src="assets/watermark-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
