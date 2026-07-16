@@ -36,10 +36,12 @@
 
       <label for="file-input" class="dropzone" id="dropzone">
         <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" multiple hidden>
-        <svg class="dropzone-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M24 6v24m0 0 9-9m-9 9-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M8 34v4a4 4 0 0 0 4 4h24a4 4 0 0 0 4-4v-4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <span class="dropzone-icon-wrap">
+          <svg class="dropzone-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M24 6v24m0 0 9-9m-9 9-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M8 34v4a4 4 0 0 0 4 4h24a4 4 0 0 0 4-4v-4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
         <p class="dropzone-title" id="dropzone-title">Перетягни файли сюди або натисни, щоб обрати</p>
         <p class="dropzone-sub">PDF, JPG, PNG, WEBP, HEIC · можна додавати файли по одному · результат завжди рівний, під формат A4</p>
       </label>
@@ -78,6 +80,7 @@
         </div>
 
         <button id="export-btn" class="btn-primary" type="button">
+          <svg class="btn-primary-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/></svg>
           <span id="export-btn-label">Завантажити PDF</span>
           <span id="export-spinner" class="btn-spinner hidden" aria-hidden="true"></span>
         </button>
@@ -100,6 +103,10 @@
 
   <footer class="foot">
     <span>GlaMaterials · GlamEng</span>
+    <a href="https://unitis.agency" target="_blank" rel="noopener" class="unitis-badge" aria-label="Сайт розроблено агенцією UNITIS AGENCY">
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAHm0lEQVR42q1aW4iWRRh+Zv5dN10t3TDPmhqlKRarVNhBOx/Ei7K66MKbIAjrttvoQFBBYAfoAFJERFFmZEGWQllUlHkoNLVYNc10TXPX3N1//+9/unkHnqbvML818PHNNzPvO+9p3nnnnQ+QQtJLfRnJdSQPk8xI/kXyB5JPkDw/Hn8mhaST+pUkXye5n+QwyTrJHpKvkbwqj0bkEU9yAsm3+c8yTLIh30dJrgpwSkirxJMcSfIFI1jnG46+15Acm8uEED+L5F4DqjO/KOLnDK7WChMknTF+NsnNOXiL5txOcorS7ISbMQC+BjAHwCCAswD0AFgH4Cfrvx7ArTZ+CEAHgIedc4+SrDnnskQGagCaANYDuA3AAICRAPoAvAvgWwANAPMA3AFgmtC0DcBVBsOADCRfNS4H7P0syTE5k99A8pCNGbL3YiEshXiQfCCabxPJWTnjzzFadOxL/5iP5OURQc8KgjZ9rG0uyWOi2i+DWSSYjiPZRbLX4JskvyM50sa0x/NZ+1MRjQsV8VvWmJmnqdnjc4gYYe97orWypEoLIoD7xbbrJBdof7w+jRlnjGYG+0YYMInkCVkwdxUhUzMwhNtMgk1RaxlccBafGgxJrk2AaxPXHsoJkpNAcqU0HibZGVSdgPAhgd1ZIf3gNrtIHleB2XxtCabXQXKfwK70AK4BQBv7lXPuLwDeOccyc7b3ZmmbBWBKyWYTBDIbwDirDwP43uZqFk1m/d45NwTgM+la4gHMF+TbTVJVPj1M1gPglNU7zN2hAD4wNVXajgD4LRJKIR/23ipt832QmpVDFZKPy58Ajsv3+BIGQjlX6iedcwMi5ZTyq9SneNugAvDpFiOCIdtQQmlPgGk709DJ3qekbbQHUEtQX1FpN9MJJWUn7pd67QziKMp7hI8WT61FZKMAjJbvvhJ7pphdKGMDfAIjob9T2hoeQF06uxIJd2LP50j7HwkM9Epbl6yJVE2cJ/W6N6kF4IktMjBV7P40gKMJsEds7QDACPFKqQzo+D4fTTqtRQZmRdJP0cDRSAsXtsjA+VLv9QD25XRmicjmqntzzg2SdHku0TlH6xsAsF+65iTOlclGGMoBD2CPNEwnOTJMluAJlIGfExxBLRqrDLAslDCaRkUa+MnbYSUgmAhgcpVKnXOZhQtqQnta8F67pT6bpK84DAVaptsiDp5zpzdkmTHQDuCiMgZEM2OjRb+7BQaU2cnB+5Vo3YvGgxYbAHZ5U+cRGbSgQgNO3NlYUf2BhJiGUTjQNDc8IXEhdwtDRwH84p1zfQD25gxiBQPjhOmGxEQpDBw3mBA4Vu0FzYg2ANjjnOsPBPwgHZeQbDM7dxW7sHqI4RZMqGkPc3DlLeCmHTkXSNcOta0tQshMADMSVMrIu7QShjiZu0prgYaLLHIe1rDaywdlIS+KFk8e4f3y3dZCGAKz+7bEKDjQcHkk0G3auRfA7xLqLkkgotfiqHgT9AnEzIjMrzdhB79aIuDDwZN5S0idDhxZudL8fFaC8PfIe3W3oIFuMb1jAA7mMWD2n1kmZLFK3zl3mmTNi1o2i0TmArjAdj+fExJ459ygbIKqtSzhKLo08ianDCcLNLbANBw0/nkgx+cc0DNT03XmhXyJKXwhMAtJzsxjOhz0zZvMsDWWRTjKEgG3RPYfGKAeaLaabYXweHlJtiAwvUEk22F5TFQwfaflOAMDn5TYfxizXMLv38Tcm3G+8k3J0PWTnFi0xVuepp3kboNpktxlbT7K/YdsdLuNCeP3S0rRFSTBLrbUfkhjvqk0+0hV6yVfMxrAbYY4z8fXnHPDAN4KpyOLLFc455oRTM3a7rYxQzbnu865Ads4i+x/heFq2PdH/9qjJGs2gWSf5B83FSWqREIzLWvcMKnutgxaTTJqNZKjSP5iY8IFxtwS/M5yojtFY8VWIWb0fnRLMq8o8ywwa6L098Oa2bb6k9Y3aO93ipLBwvxNUUb6g8IEskx0VzTR6pKJvE0024gPTA9p+pvkUtPqsDzzg3ZKBLM+ouXOwkSwmFEnyYOmssyywOclaOGRaLJgSuMEX+h7OkH6l0aL96CdyIrPDaKFxyOTeKIkfx9svIPkjkjl60huiNp+tIu9WoF3CzS8F9HwWFUaXk1iqi2Yhj39tliLVB4W9Dy7jmV0qxnqp0jOL1m4gfhrZR0Glz455RZITeKZyCQ+loXpKy4hTkY2n9mdwI0lmgym02nmpyb3TOodnGphgk2ayTXS02V3Z9Y+WQjIxL1uI9lVcfdWE9OpG/wxkuOTpJ+jhfsEWVhMr4e72ghmDMkH5fYlk6chN0D3kezMgb+Y5Mbo7owk7y2Tftk1Us1C2bUAbredNpy8jgP4EMB2iV5vlji/kZNG17YeABsB7LK2ywAskxipaTHZWufcilbuoPNu08eQ3CKepOpGfUi+V5G8V76r4BsCv9XmPqNfGfL+n/gmIrQuz1D0a8JBkssEzy1yOc4Ipi4mGm4ut0jI8J9+KFEmRpFcLX45rwyQfFkm1wU6ieQrFfB1+/Fj9P9CfMFvOItIvkjyZ5PiIMk9JJ8n2R07gpx6N8nnLKweNMn3WDx1ReVvNVH5G+9SaQNnMECYAAAAAElFTkSuQmCC" alt="" width="14" height="14" loading="lazy">
+      <span>UNITIS AGENCY</span>
+    </a>
   </footer>
 </div>
 

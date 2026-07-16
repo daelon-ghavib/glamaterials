@@ -786,8 +786,21 @@
   });
 
   if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("sw.js").catch(() => {});
+    window.addEventListener("load", async () => {
+      try {
+        const reg = await navigator.serviceWorker.register("sw.js");
+        reg.update().catch(() => {});
+        // A new SW took over mid-session (i.e. this tab was open across a deploy) —
+        // reload once so the page actually runs the version it just fetched.
+        let reloaded = false;
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (reloaded) return;
+          reloaded = true;
+          window.location.reload();
+        });
+      } catch (err) {
+        // offline-support is a bonus, never block the app on it
+      }
     });
   }
 })();

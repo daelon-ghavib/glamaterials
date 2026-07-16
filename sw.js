@@ -1,4 +1,4 @@
-const CACHE = "glamaterials-v2";
+const CACHE = "glamaterials-v3";
 const SHELL = [
   "./",
   "./index.html",
@@ -12,6 +12,9 @@ const SHELL = [
   "./assets/icons/icon-192.png",
   "./assets/icons/icon-512.png",
 ];
+
+// Heavy, rarely-changing libraries — safe to serve straight from cache once fetched.
+const CACHE_FIRST_PATHS = ["/vendor/", "/assets/icons/", "/assets/watermark"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -27,20 +30,29 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Cache-first for same-origin GET requests; network is the source of truth for everything else.
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req).then((res) => {
-        if (res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE).then((cache) => cache.put(req, copy));
-        }
+
+  const isCacheFirst = CACHE_FIRST_PATHS.some((p) => new URL(req.url).pathname.includes(p));
+
+  if (isCacheFirst) {
+    // Cache-first: instant on repeat visits, these files rarely change.
+    event.respondWith(
+      caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+        if (res.ok) caches.open(CACHE).then((cache) => cache.put(req, res.clone()));
         return res;
-      }).catch(() => cached);
-    })
+      }))
+    );
+    return;
+  }
+
+  // Network-first for the app shell (html/css/js/manifest): whenever online, always
+  // pick up the latest deploy instead of being stuck on whatever got cached once.
+  event.respondWith(
+    fetch(req).then((res) => {
+      if (res.ok) caches.open(CACHE).then((cache) => cache.put(req, res.clone()));
+      return res;
+    }).catch(() => caches.match(req))
   );
 });
