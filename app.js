@@ -7,11 +7,27 @@
   pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
   const { PDFDocument } = PDFLib;
 
-  // A4 at 200dpi — good text legibility, sane file size even for large batches.
-  const TARGET_W = 1654;
-  const TARGET_H = 2339;
-  const A4_PT_W = 595.28;
-  const A4_PT_H = 841.89;
+  // Two templates share the pipeline: a portrait A4 "document" (contain-fit, padded,
+  // watermark drawn at adjustable opacity) and a landscape "frame" for screenshots
+  // (cover-fit into a fixed window, cropping overflow, frame drawn at full opacity).
+  const TEMPLATES = {
+    document: {
+      canvasW: 1654, canvasH: 2339, // A4 at 200dpi — good text legibility, sane file size.
+      pdfPtW: 595.28, pdfPtH: 841.89,
+      fit: "contain",
+      overlayOpacity: true,
+    },
+    frame: {
+      canvasW: 2000, canvasH: 1414, // matches the frame artwork's native resolution.
+      pdfPtW: 841.89, pdfPtH: 595.28,
+      fit: "cover",
+      overlayOpacity: false,
+      window: { x: 291, y: 216, w: 1397, h: 961 },
+    },
+  };
+  let activeTemplate = "document";
+  function tpl() { return TEMPLATES[activeTemplate]; }
+
   const MAX_JOBS = 40;
   const JPEG_QUALITY = 0.92;
   const DEFAULT_OPACITY = 35;
@@ -24,11 +40,14 @@
     fileInput: document.getElementById("file-input"),
     jobList: document.getElementById("job-list"),
     settingsBlock: document.getElementById("settings-block"),
+    templateToggle: document.getElementById("template-toggle"),
+    dropzoneSub: document.getElementById("dropzone-sub"),
     mergeRow: document.getElementById("merge-row"),
     mergeToggle: document.getElementById("merge-toggle"),
     formatToggle: document.getElementById("format-toggle"),
     previewCanvas: document.getElementById("preview-canvas"),
     pageCountBadge: document.getElementById("page-count-badge"),
+    opacityBlock: document.getElementById("opacity-block"),
     opacitySlider: document.getElementById("opacity-slider"),
     opacityValue: document.getElementById("opacity-value"),
     exportBtn: document.getElementById("export-btn"),
@@ -46,6 +65,9 @@
   };
 
   let watermarkImg = null;
+  let frameImg = null;
+  function overlayImg() { return activeTemplate === "frame" ? frameImg : watermarkImg; }
+
   let jobs = [];
   let jobIdCounter = 0;
   const pendingQueue = [];
@@ -139,34 +161,64 @@
     return "Не вдалося обробити файл. Можливо, він пошкоджений.";
   }
 
-  // ---------- watermark + A4 base rendering ----------
+  // ---------- overlay images + base canvas rendering ----------
 
-  function loadWatermarkImage() {
+  function loadImageFromDataUri(dataUri) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("watermark-load-failed"));
-      img.src = WATERMARK_DATA_URI;
+      img.onerror = () => reject(new Error("overlay-load-failed"));
+      img.src = dataUri;
     });
   }
 
-  function makeA4Canvas() {
+  function makeBaseCanvas() {
+    const t = tpl();
     const canvas = document.createElement("canvas");
-    canvas.width = TARGET_W;
-    canvas.height = TARGET_H;
+    canvas.width = t.canvasW;
+    canvas.height = t.canvasH;
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, TARGET_W, TARGET_H);
+    ctx.fillRect(0, 0, t.canvasW, t.canvasH);
     return { canvas, ctx };
   }
 
-  function drawContained(ctx, drawable, srcW, srcH) {
-    const scale = Math.min(TARGET_W / srcW, TARGET_H / srcH);
-    const w = Math.round(srcW * scale);
-    const h = Math.round(srcH * scale);
-    const dx = Math.round((TARGET_W - w) / 2);
-    const dy = Math.round((TARGET_H - h) / 2);
-    ctx.drawImage(drawable, dx, dy, w, h);
+  // 'contain' pads the whole canvas (document template, no cropping).
+  // 'cover' fills the template's photo window and crops any overflow (frame template).
+  function placePhoto(ctx, drawable, srcW, srcH) {
+    const t = tpl();
+    if (t.fit === "cover") {
+      const rect = t.window;
+      const scale = Math.max(rect.w / srcW, rect.h / srcH);
+      const w = srcW * scale;
+      const h = srcH * scale;
+      const dx = rect.x + (rect.w - w) / 2;
+      const dy = rect.y + (rect.h - h) / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(rect.x, rect.y, rect.w, rect.h);
+      ctx.clip();
+      ctx.drawImage(drawable, dx, dy, w, h);
+      ctx.restore();
+    } else {
+      const scale = Math.min(t.canvasW / srcW, t.canvasH / srcH);
+      const w = Math.round(srcW * scale);
+      const h = Math.round(srcH * scale);
+      const dx = Math.round((t.canvasW - w) / 2);
+      const dy = Math.round((t.canvasH - h) / 2);
+      ctx.drawImage(drawable, dx, dy, w, h);
+    }
+  }
+
+  // Render source pages/photos at roughly their final on-canvas resolution instead
+  // of always rendering full-canvas-sized, so a cover-fit crop into a smaller window
+  // doesn't waste time rasterizing pixels that get cropped away.
+  function renderScaleFor(srcW, srcH) {
+    const t = tpl();
+    if (t.fit === "cover") {
+      return Math.max(t.window.w / srcW, t.window.h / srcH);
+    }
+    return Math.min(t.canvasW / srcW, t.canvasH / srcH);
   }
 
   function canvasToJpegBlob(canvas) {
@@ -180,7 +232,7 @@
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
       const viewport = page.getViewport({ scale: 1 });
-      const scale = Math.min(TARGET_W / viewport.width, TARGET_H / viewport.height);
+      const scale = renderScaleFor(viewport.width, viewport.height);
       const renderViewport = page.getViewport({ scale });
       const pageCanvas = document.createElement("canvas");
       pageCanvas.width = Math.round(renderViewport.width);
@@ -188,10 +240,8 @@
       const pageCtx = pageCanvas.getContext("2d");
       await page.render({ canvasContext: pageCtx, viewport: renderViewport }).promise;
 
-      const { canvas, ctx } = makeA4Canvas();
-      const dx = Math.round((TARGET_W - pageCanvas.width) / 2);
-      const dy = Math.round((TARGET_H - pageCanvas.height) / 2);
-      ctx.drawImage(pageCanvas, dx, dy);
+      const { canvas, ctx } = makeBaseCanvas();
+      placePhoto(ctx, pageCanvas, pageCanvas.width, pageCanvas.height);
       pages.push(await canvasToJpegBlob(canvas));
       onProgress && onProgress(pages.length, doc.numPages);
     }
@@ -216,8 +266,8 @@
       sourceBlob = Array.isArray(result) ? result[0] : result;
     }
     const img = await loadImageFromBlob(sourceBlob);
-    const { canvas, ctx } = makeA4Canvas();
-    drawContained(ctx, img, img.naturalWidth, img.naturalHeight);
+    const { canvas, ctx } = makeBaseCanvas();
+    placePhoto(ctx, img, img.naturalWidth, img.naturalHeight);
     return [await canvasToJpegBlob(canvas)];
   }
 
@@ -405,9 +455,16 @@
     const has = jobs.length > 0;
     els.settingsBlock.classList.toggle("hidden", !has);
     els.mergeRow.classList.toggle("hidden", jobs.length <= 1 || outputFormat === "photos");
+    els.opacityBlock.classList.toggle("hidden", !tpl().overlayOpacity);
     const ready = readyJobs();
     els.exportBtn.disabled = isExporting || ready.length === 0;
     updateExportButtonLabel();
+  }
+
+  function updateDropzoneHint() {
+    els.dropzoneSub.textContent = activeTemplate === "frame"
+      ? "JPG, PNG, WEBP, HEIC · можна додавати по одному · фото автоматично обрізається під рамку"
+      : "PDF, JPG, PNG, WEBP, HEIC · можна додавати файли по одному · результат завжди рівний, під формат A4";
   }
 
   function updateExportButtonLabel() {
@@ -439,19 +496,20 @@
     }
     if (previewRAF) cancelAnimationFrame(previewRAF);
     previewRAF = requestAnimationFrame(async () => {
+      const t = tpl();
       const blob = ready[0].pages[0];
       const bitmap = await createImageBitmap(blob);
-      previewWorkCanvas.width = TARGET_W;
-      previewWorkCanvas.height = TARGET_H;
+      previewWorkCanvas.width = t.canvasW;
+      previewWorkCanvas.height = t.canvasH;
       const ctx = previewWorkCanvas.getContext("2d");
       ctx.drawImage(bitmap, 0, 0);
       bitmap.close();
-      ctx.globalAlpha = currentOpacityFraction();
-      ctx.drawImage(watermarkImg, 0, 0, TARGET_W, TARGET_H);
+      ctx.globalAlpha = t.overlayOpacity ? currentOpacityFraction() : 1;
+      ctx.drawImage(overlayImg(), 0, 0, t.canvasW, t.canvasH);
       ctx.globalAlpha = 1;
 
-      els.previewCanvas.width = TARGET_W;
-      els.previewCanvas.height = TARGET_H;
+      els.previewCanvas.width = t.canvasW;
+      els.previewCanvas.height = t.canvasH;
       els.previewCanvas.getContext("2d").drawImage(previewWorkCanvas, 0, 0);
     });
   }
@@ -459,26 +517,28 @@
   // ---------- export ----------
 
   async function compositePageToJpegBlob(pageBlob, opacity) {
+    const t = tpl();
     const bitmap = await createImageBitmap(pageBlob);
-    exportWorkCanvas.width = TARGET_W;
-    exportWorkCanvas.height = TARGET_H;
+    exportWorkCanvas.width = t.canvasW;
+    exportWorkCanvas.height = t.canvasH;
     const ctx = exportWorkCanvas.getContext("2d");
     ctx.drawImage(bitmap, 0, 0);
     bitmap.close();
-    ctx.globalAlpha = opacity;
-    ctx.drawImage(watermarkImg, 0, 0, TARGET_W, TARGET_H);
+    ctx.globalAlpha = t.overlayOpacity ? opacity : 1;
+    ctx.drawImage(overlayImg(), 0, 0, t.canvasW, t.canvasH);
     ctx.globalAlpha = 1;
     return canvasToJpegBlob(exportWorkCanvas);
   }
 
   async function buildPdfFromPages(pageBlobs, opacity, onProgress) {
+    const t = tpl();
     const pdfDoc = await PDFDocument.create();
     for (let i = 0; i < pageBlobs.length; i++) {
       const outBlob = await compositePageToJpegBlob(pageBlobs[i], opacity);
       const bytes = await outBlob.arrayBuffer();
       const jpg = await pdfDoc.embedJpg(bytes);
-      const page = pdfDoc.addPage([A4_PT_W, A4_PT_H]);
-      page.drawImage(jpg, { x: 0, y: 0, width: A4_PT_W, height: A4_PT_H });
+      const page = pdfDoc.addPage([t.pdfPtW, t.pdfPtH]);
+      page.drawImage(jpg, { x: 0, y: 0, width: t.pdfPtW, height: t.pdfPtH });
       onProgress && onProgress(i + 1, pageBlobs.length);
     }
     return pdfDoc.save();
@@ -747,6 +807,21 @@
     });
   });
 
+  els.templateToggle.addEventListener("click", (e) => {
+    const btn = e.target.closest(".seg-btn");
+    if (!btn || btn.dataset.value === activeTemplate) return;
+    const hadJobs = jobs.length > 0;
+    activeTemplate = btn.dataset.value;
+    [...els.templateToggle.children].forEach((b) => b.classList.toggle("active", b === btn));
+
+    outputFormat = activeTemplate === "frame" ? "photos" : "pdf";
+    [...els.formatToggle.children].forEach((b) => b.classList.toggle("active", b.dataset.value === outputFormat));
+
+    resetQueue();
+    updateDropzoneHint();
+    if (hadJobs) showToast("Чергу очищено — новий шаблон", "success");
+  });
+
   els.mergeToggle.addEventListener("click", (e) => {
     const btn = e.target.closest(".seg-btn");
     if (!btn) return;
@@ -779,10 +854,15 @@
   els.closeHistoryBtn.addEventListener("click", () => els.panelHistory.classList.add("hidden"));
 
   els.opacityValue.textContent = DEFAULT_OPACITY + "%";
+  updateDropzoneHint();
 
-  loadWatermarkImage().then((img) => { watermarkImg = img; }).catch((err) => {
+  loadImageFromDataUri(WATERMARK_DATA_URI).then((img) => { watermarkImg = img; }).catch((err) => {
     console.error(err);
     showToast("Не вдалося завантажити водяний знак", "error");
+  });
+  loadImageFromDataUri(FRAME_DATA_URI).then((img) => { frameImg = img; }).catch((err) => {
+    console.error(err);
+    showToast("Не вдалося завантажити шаблон рамки", "error");
   });
 
   if ("serviceWorker" in navigator) {

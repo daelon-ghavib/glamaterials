@@ -34,6 +34,14 @@
 
     <section id="panel-workspace" class="panel panel-workspace">
 
+      <div class="segmented-row">
+        <span class="segmented-label">Шаблон</span>
+        <div class="segmented" id="template-toggle" role="tablist">
+          <button type="button" class="seg-btn active" data-value="document">PDF-документ</button>
+          <button type="button" class="seg-btn" data-value="frame">Рамка для скріншота</button>
+        </div>
+      </div>
+
       <label for="file-input" class="dropzone" id="dropzone">
         <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" multiple hidden>
         <span class="dropzone-icon-wrap">
@@ -43,7 +51,7 @@
           </svg>
         </span>
         <p class="dropzone-title" id="dropzone-title">Перетягни файли сюди або натисни, щоб обрати</p>
-        <p class="dropzone-sub">PDF, JPG, PNG, WEBP, HEIC · можна додавати файли по одному · результат завжди рівний, під формат A4</p>
+        <p class="dropzone-sub" id="dropzone-sub">PDF, JPG, PNG, WEBP, HEIC · можна додавати файли по одному · результат завжди рівний, під формат A4</p>
       </label>
 
       <ul id="job-list" class="job-list"></ul>
@@ -71,7 +79,7 @@
           <span id="page-count-badge" class="page-count-badge"></span>
         </div>
 
-        <div class="control-block">
+        <div class="control-block" id="opacity-block">
           <div class="control-label-row">
             <label for="opacity-slider">Прозорість водяного знаку</label>
             <span id="opacity-value">35%</span>
@@ -115,6 +123,7 @@
 <script src="vendor/pdf-lib.min.js"></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="assets/watermark-data.js"></script>
+<script src="assets/frame-data.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

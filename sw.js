@@ -1,4 +1,4 @@
-const CACHE = "glamaterials-v3";
+const CACHE = "glamaterials-v4";
 const SHELL = [
   "./",
   "./index.html",
@@ -6,6 +6,7 @@ const SHELL = [
   "./app.js",
   "./manifest.json",
   "./assets/watermark-data.js",
+  "./assets/frame-data.js",
   "./vendor/pdf-lib.min.js",
   "./vendor/pdf.min.js",
   "./vendor/pdf.worker.min.js",
@@ -14,7 +15,7 @@ const SHELL = [
 ];
 
 // Heavy, rarely-changing libraries — safe to serve straight from cache once fetched.
-const CACHE_FIRST_PATHS = ["/vendor/", "/assets/icons/", "/assets/watermark"];
+const CACHE_FIRST_PATHS = ["/vendor/", "/assets/icons/", "/assets/watermark", "/assets/frame"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

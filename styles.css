@@ -299,6 +299,10 @@ body {
   gap: 7px;
 }
 
+.panel-workspace > .segmented-row {
+  margin-bottom: 16px;
+}
+
 .segmented-label {
   font-size: 12.5px;
   font-weight: 600;
