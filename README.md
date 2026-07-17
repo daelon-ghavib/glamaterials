@@ -16,6 +16,15 @@
 
 **Все відбувається локально в браузері.** Файли ніколи нікуди не надсилаються — немає бекенду, немає зовнішнього сховища. Історія лежить у IndexedDB твого браузера на цьому пристрої.
 
+## Бренд-система
+
+GlaMaterials — частина сімʼї GlamEng (сайт [glameng.online](https://glameng.online)), тож дизайн узятий безпосередньо з токенів сайту, а не вигаданий окремо:
+
+- **Кольори:** `--ink #3D1F2D`, `--champagne #E8849A`, `--blush #F2A0B8`, `--cream #FFF5F8` — ті самі змінні, що й у `glameng/index.html`. Магента лого-марки `#9D2F7F` — окремий "іконковий" колір, він і на `favicon.png`/`apple-touch-icon.png` сайту.
+- **Шрифти:** display — Cormorant Garamond (лого, «Історія»), body — Inter. Самохостяться в `assets/fonts/` (тільки latin+cyrillic підмножини — досить для української), підключені через `assets/fonts/fonts.css`. Ніяких запитів до Google Fonts у рантаймі.
+- **Вордмарк:** "Gla" (ink) + курсивне "Materials" (champagne) — той самий патерн, що "Glam" + курсивне "Eng" на сайті.
+- **Лого-марка:** кругла емблема з розкритою книжкою — спрощена версія фірмового значка GlamEng (глобус + людина + книжка), де лишили тільки книжку (без людини), плюс невеличкий іскристий акцент зверху-справа — на честь того, що застосунок "доводить до блиску" матеріали водяним знаком. Джерело — `assets/logo-source.html` (звичайний SVG, рендериться через headless Chrome або будь-який браузер).
+
 ## Структура
 
 - `index.html`, `styles.css`, `app.js` — весь застосунок.
@@ -25,7 +34,9 @@
 - `assets/frame.png` — оригінальний шаблон рамки для скріншотів, landscape A4 (джерело, у рантаймі не використовується).
 - `assets/frame-cutout.png` — той самий шаблон з прозорим вікном по центру (там, де показується фото) — джерело для `frame-data.js`.
 - `assets/frame-data.js` — `frame-cutout.png`, вшитий як base64.
-- `assets/icons/` — іконки для PWA (favicon, apple-touch-icon, 192/512, maskable).
+- `assets/logo-source.html` — вихідний SVG лого-марки (кругла емблема з книжкою), прозорий фон. `assets/logo-source-maskable.html` — той самий значок, але з меншим відступом і білим тлом, під Android-safe-zone (маскабельні іконки).
+- `assets/icons/` — усі растеризовані іконки для PWA (favicon, apple-touch-icon, 192/512, maskable), згенеровані з `logo-source*.html`.
+- `assets/fonts/` — self-hosted Cormorant Garamond + Inter (woff2, latin+cyrillic) і `fonts.css` з `@font-face`.
 - `manifest.json`, `sw.js` — PWA-маніфест і service worker (кешування статики, "Додати на екран Головна" на iPhone).
 - `vendor/` — `pdf-lib` (збірка PDF), `pdf.js` (рендер вхідних PDF-сторінок), `heic2any` (конвертація HEIC → JPEG), `jszip` (архіви) — усе завантажено локально, без CDN у рантаймі. `heic2any` і `jszip` підвантажуються лише за потреби (лениво), щоб не роздувати початкове завантаження сторінки.
 - `vercel.json` — кеш-заголовки для статики.
@@ -69,3 +80,16 @@ Safari → відкрити сайт → кнопка "Поділитися" →
 ## Перегенерувати рамку для скріншотів
 
 Постав новий `assets/frame.png` (landscape A4, 2000×1414) і виріж прозоре вікно там, де має показуватись фото — прямокутник координат зараз `{x: 291, y: 216, w: 1397, h: 961}` (заданий у `TEMPLATES.frame.window` в `app.js`, підібраний під поточний дизайн рамки). Якщо новий дизайн має вікно в іншому місці/розмірі — поміняй ці координати в `app.js` відповідно до нового `frame.png`. Результат зберегти як `assets/frame-cutout.png`, потім перегенерувати `assets/frame-data.js`.
+
+## Перегенерувати лого / іконки
+
+1. Поправ SVG у `assets/logo-source.html` (і за потреби `assets/logo-source-maskable.html` — версія з меншим відступом для Android).
+2. Заренди в PNG через headless Chrome (без встановлення додаткових бібліотек):
+   ```bash
+   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+     --headless --disable-gpu --screenshot=/tmp/logo.png \
+     --window-size=1024,1024 --default-background-color=00000000 \
+     "file:///$(pwd)/assets/logo-source.html"
+   ```
+3. З отриманого 1024×1024 PNG вирізати всі розміри (192/512/apple-touch/favicon/maskable) — дивись логіку в історії розробки (Pillow, `LANCZOS`, композит на білий/безпечну зону).
+4. Той самий `<svg>` (без `<rect>` фону) також вставлений inline у `index.html` як `.brand-mark` у шапці — онови його там теж, якщо міняєш дизайн.

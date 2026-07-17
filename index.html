@@ -7,7 +7,7 @@
 <meta name="description" content="Накладаєш фірмовий водяний знак GlamEng на PDF або фото за пару секунд. Все відбувається прямо в браузері — файли нікуди не завантажуються.">
 
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#d45a8f">
+<meta name="theme-color" content="#3D1F2D">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -15,6 +15,9 @@
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="icon" href="assets/icons/favicon.png">
 
+<link rel="preload" href="assets/fonts/inter-400-normal-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/cormorant-600-normal-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/fonts/fonts.css">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -22,11 +25,17 @@
 <div class="app">
   <header class="topbar">
     <div class="brand">
-      <span class="brand-mark">G</span>
-      <span class="brand-name">GlaMaterials</span>
+      <svg class="brand-mark" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="128" cy="128" r="110" fill="none" stroke="#9D2F7F" stroke-width="10"/>
+        <path d="M191 44 C191 54 183 62 173 62 C183 62 191 70 191 80 C191 70 199 62 209 62 C199 62 191 54 191 44 Z" fill="#9D2F7F"/>
+        <path d="M54,90 C80,90 110,100 128,110 C146,100 176,90 202,90 C210,112 210,150 196,176 C175,190 150,194 128,194 C106,194 81,190 60,176 C46,150 46,112 54,90 Z"
+              fill="none" stroke="#9D2F7F" stroke-width="10" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="M128,110 C126,140 126,165 128,194" fill="none" stroke="#9D2F7F" stroke-width="9" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-name">Gla<span class="accent">Materials</span></span>
     </div>
     <button id="history-btn" class="icon-btn" type="button" aria-label="Історія оброблених файлів">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
     </button>
   </header>
 
