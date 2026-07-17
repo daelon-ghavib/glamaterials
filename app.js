@@ -31,7 +31,7 @@
   const MAX_JOBS = 40;
   const JPEG_QUALITY = 0.92;
   const DEFAULT_OPACITY = 35;
-  const MAX_HISTORY = 8;
+  const MAX_HISTORY = 40;
   const MAX_HISTORY_ITEM_BYTES = 30 * 1024 * 1024;
 
   const els = {
@@ -133,12 +133,21 @@
     setTimeout(() => URL.revokeObjectURL(url), 15000);
   }
 
-  // On iOS Safari, <a download> on a blob: URL usually just opens the PDF in a
-  // new tab instead of saving it — the Web Share sheet ("Save to Files") is the
-  // only reliable "download" affordance there, so prefer it when available and
-  // fall back to the anchor-click download everywhere else (desktop, etc).
+  // A real touchscreen (phone/tablet) — not just "Safari" — since iPad can report
+  // a desktop-style UA/platform but still has a touchscreen and the same broken
+  // <a download> behavior as iPhone. A trackpad/mouse-only Mac/PC reports 0 here.
+  function isTouchDevice() {
+    return navigator.maxTouchPoints > 0 || "ontouchstart" in window;
+  }
+
+  // On iOS/iPadOS Safari, <a download> on a blob: URL usually just opens the file
+  // in a new tab instead of saving it — the Web Share sheet ("Save to Files") is
+  // the only reliable "download" affordance there. Desktop browsers download a
+  // blob: URL just fine, and desktop Safari/Chrome also implement Web Share, so
+  // without this check desktop users would get the OS share sheet instead of a
+  // plain download — only take the share path on touch devices.
   async function deliverBlob(blob, filename, mimeType) {
-    if (navigator.canShare && typeof navigator.share === "function") {
+    if (isTouchDevice() && navigator.canShare && typeof navigator.share === "function") {
       try {
         const file = new File([blob], filename, { type: mimeType });
         if (navigator.canShare({ files: [file] })) {
@@ -625,7 +634,7 @@
         const zipFilename = "glamaterials_photos.zip";
 
         let shared = false;
-        if (navigator.canShare && typeof navigator.share === "function") {
+        if (isTouchDevice() && navigator.canShare && typeof navigator.share === "function") {
           try {
             const files = imageBlobs.map((b, i) => new File([b], filenames[i], { type: "image/jpeg" }));
             if (navigator.canShare({ files })) {
