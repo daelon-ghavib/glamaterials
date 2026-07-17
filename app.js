@@ -33,6 +33,7 @@
   const DEFAULT_OPACITY = 35;
   const MAX_HISTORY = 40;
   const MAX_HISTORY_ITEM_BYTES = 30 * 1024 * 1024;
+  const OPACITY_STORAGE_KEY = "glamaterials_opacity";
 
   const els = {
     dropzone: document.getElementById("dropzone"),
@@ -46,6 +47,8 @@
     mergeToggle: document.getElementById("merge-toggle"),
     formatToggle: document.getElementById("format-toggle"),
     previewCanvas: document.getElementById("preview-canvas"),
+    previewPrev: document.getElementById("preview-prev"),
+    previewNext: document.getElementById("preview-next"),
     pageCountBadge: document.getElementById("page-count-badge"),
     opacityBlock: document.getElementById("opacity-block"),
     opacitySlider: document.getElementById("opacity-slider"),
@@ -76,6 +79,7 @@
   let outputFormat = "pdf"; // 'pdf' | 'photos'
   let isExporting = false;
   let previewRAF = null;
+  let previewIndex = 0;
   let toastTimer = null;
 
   const previewWorkCanvas = document.createElement("canvas");
@@ -120,6 +124,28 @@
     el.className = "toast" + (kind === "success" ? " toast-success" : kind === "error" ? " toast-error" : "");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.classList.add("hidden"), duration || 2800);
+  }
+
+  const CONFETTI_COLORS = ["#E8849A", "#F2A0B8", "#9D2F7F", "#3D1F2D", "#F5B8C8"];
+  function celebrate(originEl) {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const rect = originEl.getBoundingClientRect();
+    const originX = rect.left + rect.width / 2;
+    const originY = rect.top + rect.height / 2;
+    for (let i = 0; i < 22; i++) {
+      const el = document.createElement("span");
+      el.className = "confetti-bit";
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 60 + Math.random() * 90;
+      el.style.left = originX + "px";
+      el.style.top = originY + "px";
+      el.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+      el.style.setProperty("--dx", Math.cos(angle) * dist + "px");
+      el.style.setProperty("--dy", Math.sin(angle) * dist - 40 + "px");
+      el.style.setProperty("--rot", (Math.random() * 360 - 180) + "deg");
+      document.body.appendChild(el);
+      el.addEventListener("animationend", () => el.remove());
+    }
   }
 
   function triggerDownloadBlob(blob, filename) {
@@ -388,9 +414,11 @@
   function resetQueue() {
     jobs = [];
     pendingQueue.length = 0;
+    previewIndex = 0;
     renderJobList();
     updateDropzoneMode();
     updateSettingsVisibility();
+    updatePreview();
   }
 
   // ---------- rendering UI ----------
@@ -489,24 +517,55 @@
       label = "Завантажити PDF";
     }
     els.exportBtnLabel.textContent = label;
-    els.pageCountBadge.textContent = pages ? pages + (pages === 1 ? " стор." : " стор.") : "";
   }
 
   function currentOpacityFraction() {
     return Number(els.opacitySlider.value) / 100;
   }
 
+  // Flat list of every rendered page across ready jobs, in queue order — lets the
+  // preview flip through the whole batch instead of only ever showing page 1.
+  function allReadyPageRefs() {
+    const refs = [];
+    for (const job of readyJobs()) {
+      job.pages.forEach((blob) => refs.push(blob));
+    }
+    return refs;
+  }
+
+  function clampPreviewIndex() {
+    const total = allReadyPageRefs().length;
+    if (total === 0) { previewIndex = 0; return; }
+    previewIndex = Math.min(Math.max(previewIndex, 0), total - 1);
+  }
+
+  function shiftPreview(delta) {
+    const total = allReadyPageRefs().length;
+    if (total <= 1) return;
+    previewIndex = (previewIndex + delta + total) % total;
+    updatePreview();
+  }
+
   function updatePreview() {
-    const ready = readyJobs();
-    if (!ready.length) {
+    const refs = allReadyPageRefs();
+    if (!refs.length) {
       const ctx = els.previewCanvas.getContext("2d");
       ctx.clearRect(0, 0, els.previewCanvas.width, els.previewCanvas.height);
+      els.pageCountBadge.textContent = "";
+      els.previewPrev.classList.add("hidden");
+      els.previewNext.classList.add("hidden");
       return;
     }
+    clampPreviewIndex();
+    const total = refs.length;
+    els.pageCountBadge.textContent = total > 1 ? `${previewIndex + 1}/${total}` : `${total} стор.`;
+    els.previewPrev.classList.toggle("hidden", total <= 1);
+    els.previewNext.classList.toggle("hidden", total <= 1);
+
     if (previewRAF) cancelAnimationFrame(previewRAF);
     previewRAF = requestAnimationFrame(async () => {
       const t = tpl();
-      const blob = ready[0].pages[0];
+      const blob = refs[previewIndex];
       const bitmap = await createImageBitmap(blob);
       previewWorkCanvas.width = t.canvasW;
       previewWorkCanvas.height = t.canvasH;
@@ -519,7 +578,9 @@
 
       els.previewCanvas.width = t.canvasW;
       els.previewCanvas.height = t.canvasH;
+      els.previewCanvas.style.opacity = "0";
       els.previewCanvas.getContext("2d").drawImage(previewWorkCanvas, 0, 0);
+      requestAnimationFrame(() => { els.previewCanvas.style.opacity = "1"; });
     });
   }
 
@@ -653,7 +714,10 @@
         }
       }
 
-      if (!cancelled) showToast("Готово! Дякую 🎀", "success");
+      if (!cancelled) {
+        showToast("Готово! Дякую 🎀", "success");
+        celebrate(els.exportBtn);
+      }
     } catch (err) {
       console.error(err);
       showToast("Не вдалося сформувати файл. Спробуй ще раз.", "error");
@@ -850,7 +914,11 @@
   els.opacitySlider.addEventListener("input", () => {
     els.opacityValue.textContent = els.opacitySlider.value + "%";
     updatePreview();
+    try { localStorage.setItem(OPACITY_STORAGE_KEY, els.opacitySlider.value); } catch (err) { /* private mode etc — non-essential */ }
   });
+
+  els.previewPrev.addEventListener("click", () => shiftPreview(-1));
+  els.previewNext.addEventListener("click", () => shiftPreview(1));
 
   els.exportBtn.addEventListener("click", exportNow);
   els.clearBtn.addEventListener("click", resetQueue);
@@ -862,7 +930,15 @@
   });
   els.closeHistoryBtn.addEventListener("click", () => els.panelHistory.classList.add("hidden"));
 
-  els.opacityValue.textContent = DEFAULT_OPACITY + "%";
+  (() => {
+    let initialOpacity = DEFAULT_OPACITY;
+    try {
+      const saved = localStorage.getItem(OPACITY_STORAGE_KEY);
+      if (saved !== null && !Number.isNaN(Number(saved))) initialOpacity = Number(saved);
+    } catch (err) { /* private mode etc — fall back to default */ }
+    els.opacitySlider.value = String(initialOpacity);
+    els.opacityValue.textContent = initialOpacity + "%";
+  })();
   updateDropzoneHint();
 
   loadImageFromDataUri(WATERMARK_DATA_URI).then((img) => { watermarkImg = img; }).catch((err) => {

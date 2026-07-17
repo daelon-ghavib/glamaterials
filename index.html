@@ -24,19 +24,20 @@
 
 <div class="app">
   <header class="topbar">
+    <button id="history-btn" class="icon-btn icon-btn-float" type="button" aria-label="Історія оброблених файлів">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+    </button>
     <div class="brand">
       <svg class="brand-mark" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <circle cx="128" cy="128" r="110" fill="none" stroke="#9D2F7F" stroke-width="10"/>
-        <path d="M191 44 C191 54 183 62 173 62 C183 62 191 70 191 80 C191 70 199 62 209 62 C199 62 191 54 191 44 Z" fill="#9D2F7F"/>
-        <path d="M54,90 C80,90 110,100 128,110 C146,100 176,90 202,90 C210,112 210,150 196,176 C175,190 150,194 128,194 C106,194 81,190 60,176 C46,150 46,112 54,90 Z"
+        <circle class="brand-mark-ring" cx="128" cy="128" r="110" fill="none" stroke="#9D2F7F" stroke-width="10"/>
+        <path class="brand-mark-sparkle" d="M191 40 C191 50 183 58 173 58 C183 58 191 66 191 76 C191 66 199 58 209 58 C199 58 191 50 191 40 Z" fill="#9D2F7F"/>
+        <path d="M 123.0,190.6 C 120.7,189.1 115.0,184.3 109.4,181.4 C 103.8,178.5 98.8,175.6 89.6,173.3 C 80.4,171.0 59.9,184.4 54.0,167.7 C 48.1,151.0 50.3,88.7 54.3,73.0 C 58.3,57.3 70.8,72.8 78.1,73.6 C 85.4,74.4 91.5,75.4 98.3,78.0 C 105.1,80.6 114.6,86.2 119.0,89.1 C 123.4,92.0 123.6,86.5 124.6,95.3 C 125.6,104.1 124.8,126.4 124.9,141.9 C 125.0,157.4 125.2,180.7 125.2,188.5 Z"
               fill="none" stroke="#9D2F7F" stroke-width="10" stroke-linejoin="round" stroke-linecap="round"/>
-        <path d="M128,110 C126,140 126,165 128,194" fill="none" stroke="#9D2F7F" stroke-width="9" stroke-linecap="round"/>
+        <path d="M 133.0,190.6 C 135.3,189.1 141.0,184.3 146.6,181.4 C 152.2,178.5 157.2,175.6 166.4,173.3 C 175.6,171.0 196.1,184.4 202.0,167.7 C 207.9,151.0 205.7,88.7 201.7,73.0 C 197.7,57.3 185.2,72.8 177.9,73.6 C 170.6,74.4 164.5,75.4 157.7,78.0 C 150.9,80.6 141.4,86.2 137.0,89.1 C 132.6,92.0 132.4,86.5 131.4,95.3 C 130.4,104.1 131.2,126.4 131.1,141.9 C 131.0,157.4 130.9,180.7 130.8,188.5 Z"
+              fill="none" stroke="#9D2F7F" stroke-width="10" stroke-linejoin="round" stroke-linecap="round"/>
       </svg>
       <span class="brand-name">Gla<span class="accent">Materials</span></span>
     </div>
-    <button id="history-btn" class="icon-btn" type="button" aria-label="Історія оброблених файлів">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-    </button>
   </header>
 
   <main class="stage">
@@ -46,7 +47,7 @@
       <div class="segmented-row">
         <span class="segmented-label">Шаблон</span>
         <div class="segmented" id="template-toggle" role="tablist">
-          <button type="button" class="seg-btn active" data-value="document">Шаблон</button>
+          <button type="button" class="seg-btn active" data-value="document">Документ</button>
           <button type="button" class="seg-btn" data-value="frame">Рамка</button>
         </div>
       </div>
@@ -84,7 +85,13 @@
         </div>
 
         <div class="preview-wrap">
+          <button id="preview-prev" class="preview-nav-btn hidden" type="button" aria-label="Попередня сторінка">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
           <canvas id="preview-canvas" class="preview-canvas"></canvas>
+          <button id="preview-next" class="preview-nav-btn hidden" type="button" aria-label="Наступна сторінка">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
           <span id="page-count-badge" class="page-count-badge"></span>
         </div>
 
@@ -119,7 +126,7 @@
   </main>
 
   <footer class="foot">
-    <span>GlaMaterials · GlamEng</span>
+    <p class="foot-heart">Зроблено з <span class="heart">♥</span> для <a href="https://www.instagram.com/glameng/" target="_blank" rel="noopener">@glameng</a></p>
     <a href="https://unitis.agency" target="_blank" rel="noopener" class="unitis-badge" aria-label="Сайт розроблено агенцією UNITIS AGENCY">
       <img src="data:image/png;base64,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" alt="" width="14" height="14" loading="lazy">
       <span>UNITIS AGENCY</span>
