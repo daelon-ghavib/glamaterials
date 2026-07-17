@@ -121,16 +121,6 @@ body::after {
   flex-shrink: 0;
 }
 
-.brand-mark-sparkle {
-  transform-origin: 191px 58px;
-  animation: sparkleTwinkle 2.8s ease-in-out infinite;
-}
-
-@keyframes sparkleTwinkle {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.7); }
-}
-
 .brand-name {
   font-family: var(--ff-disp);
   font-size: 30px;
@@ -340,9 +330,30 @@ body::after {
 .job-name {
   font-size: 13.5px;
   font-weight: 600;
+  font-family: inherit;
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  width: 100%;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  cursor: text;
+  transition: background var(--t) ease, border-color var(--t) ease;
+}
+
+.job-name:hover {
+  background: var(--cream-d);
+}
+
+.job-name:focus {
+  outline: none;
+  background: var(--white);
+  border-color: var(--champagne);
+  box-shadow: 0 0 0 3px rgba(232, 132, 154, 0.18);
 }
 
 .job-meta {

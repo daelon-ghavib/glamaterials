@@ -421,6 +421,23 @@
     updatePreview();
   }
 
+  function requeueJobsForTemplateChange() {
+    previewIndex = 0;
+    pendingQueue.length = 0;
+    for (const job of jobs) {
+      job.status = "queued";
+      job.pages = [];
+      job.thumbUrl = null;
+      job.progressLabel = "";
+      job.errorMsg = "";
+    }
+    renderJobList();
+    updateDropzoneMode();
+    updateSettingsVisibility();
+    updatePreview();
+    jobs.forEach((job) => enqueueJob(job));
+  }
+
   // ---------- rendering UI ----------
 
   function updateDropzoneMode() {
@@ -457,9 +474,21 @@
 
       const info = document.createElement("div");
       info.className = "job-info";
-      const nameEl = document.createElement("span");
+      const nameEl = document.createElement("input");
       nameEl.className = "job-name";
-      nameEl.textContent = job.name;
+      nameEl.type = "text";
+      nameEl.spellcheck = false;
+      nameEl.value = job.baseName;
+      nameEl.title = "Натисни, щоб перейменувати файл результату";
+      nameEl.addEventListener("change", () => {
+        const clean = sanitizeName(nameEl.value);
+        job.baseName = clean;
+        nameEl.value = clean;
+      });
+      nameEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") nameEl.blur();
+      });
+      nameEl.addEventListener("click", (e) => e.stopPropagation());
       const metaEl = document.createElement("span");
       metaEl.className = "job-meta" + (job.status === "error" ? " error" : "");
       metaEl.textContent = jobStatusMeta(job);
@@ -890,9 +919,9 @@
     outputFormat = activeTemplate === "frame" ? "photos" : "pdf";
     [...els.formatToggle.children].forEach((b) => b.classList.toggle("active", b.dataset.value === outputFormat));
 
-    resetQueue();
+    requeueJobsForTemplateChange();
     updateDropzoneHint();
-    if (hadJobs) showToast("Чергу очищено — новий шаблон", "success");
+    if (hadJobs) showToast("Файли перероблено під новий шаблон", "success");
   });
 
   els.mergeToggle.addEventListener("click", (e) => {
