@@ -22,7 +22,7 @@
       pdfPtW: 841.89, pdfPtH: 595.28,
       fit: "cover",
       overlayOpacity: false,
-      window: { x: 291, y: 216, w: 1397, h: 961 },
+      window: { x: 294, y: 224, w: 1403, h: 964 },
     },
   };
   let activeTemplate = "document";
