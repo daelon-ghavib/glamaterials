@@ -315,21 +315,30 @@
     const buf = await file.arrayBuffer();
     const doc = await pdfjsLib.getDocument({ data: buf }).promise;
     const pages = [];
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i);
-      const viewport = page.getViewport({ scale: 1 });
-      const scale = renderScaleFor(viewport.width, viewport.height);
-      const renderViewport = page.getViewport({ scale });
-      const pageCanvas = document.createElement("canvas");
-      pageCanvas.width = Math.round(renderViewport.width);
-      pageCanvas.height = Math.round(renderViewport.height);
-      const pageCtx = pageCanvas.getContext("2d");
-      await page.render({ canvasContext: pageCtx, viewport: renderViewport }).promise;
+    try {
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const viewport = page.getViewport({ scale: 1 });
+        const scale = renderScaleFor(viewport.width, viewport.height);
+        const renderViewport = page.getViewport({ scale });
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = Math.round(renderViewport.width);
+        pageCanvas.height = Math.round(renderViewport.height);
+        const pageCtx = pageCanvas.getContext("2d");
+        await page.render({ canvasContext: pageCtx, viewport: renderViewport }).promise;
 
-      const { canvas, ctx } = makeBaseCanvas();
-      placePhoto(ctx, pageCanvas, pageCanvas.width, pageCanvas.height);
-      pages.push(await canvasToJpegBlob(canvas));
-      onProgress && onProgress(pages.length, doc.numPages);
+        const { canvas, ctx } = makeBaseCanvas();
+        placePhoto(ctx, pageCanvas, pageCanvas.width, pageCanvas.height);
+        pages.push(await canvasToJpegBlob(canvas));
+        // Free the page's own scratch buffers as we go — a long PDF otherwise
+        // keeps every rendered page alive at once, which is what kills iPhones.
+        page.cleanup();
+        pageCanvas.width = pageCanvas.height = 0;
+        onProgress && onProgress(pages.length, doc.numPages);
+      }
+    } finally {
+      // Without this every processed PDF leaves its pdf.js worker running.
+      await doc.destroy().catch(() => {});
     }
     return pages;
   }
@@ -2122,6 +2131,482 @@
     }
   }
 
+  // ---------- file tools ----------
+  // Everything here runs on-device: pdf-lib rearranges pages losslessly, and
+  // pdf.js rasterizes when a tool genuinely has to (photos, compression).
+
+  const toolEls = {
+    modeSwitch: document.getElementById("mode-switch"),
+    panelTools: document.getElementById("panel-tools"),
+    panelWorkspace: document.getElementById("panel-workspace"),
+    grid: document.getElementById("tools-grid"),
+    runner: document.getElementById("tool-runner"),
+    back: document.getElementById("tool-back"),
+    title: document.getElementById("tool-title"),
+    desc: document.getElementById("tool-desc"),
+    dropzone: document.getElementById("tool-dropzone"),
+    input: document.getElementById("tool-input"),
+    dzTitle: document.getElementById("tool-dropzone-title"),
+    dzSub: document.getElementById("tool-dropzone-sub"),
+    fileList: document.getElementById("tool-files"),
+    options: document.getElementById("tool-options"),
+    run: document.getElementById("tool-run"),
+    runLabel: document.getElementById("tool-run-label"),
+    spinner: document.getElementById("tool-spinner"),
+    progressTrack: document.getElementById("tool-progress-track"),
+    progressFill: document.getElementById("tool-progress-fill"),
+  };
+
+  let activeTool = null;
+  let toolFiles = [];
+  let toolBusy = false;
+
+  const ICONS = {
+    merge: '<path d="M8 4h8M8 4v6a4 4 0 0 1-4 4M8 4a4 4 0 0 0 4 4h4"/><path d="M12 20v-6"/><path d="M9 17l3 3 3-3"/>',
+    split: '<path d="M6 3v7a3 3 0 0 0 3 3h6a3 3 0 0 1 3 3v5"/><path d="M18 3v7a3 3 0 0 1-3 3H9a3 3 0 0 0-3 3v5"/>',
+    rotate: '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>',
+    trash: '<path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6 7l1 13h10l1-13"/>',
+    toPhoto: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M20 16l-5-5-6.5 8"/>',
+    toPdf: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+    zip: '<path d="M20 12V7a2 2 0 0 0-2-2h-4l-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6"/><path d="M17 14v6"/><path d="M14 17l3 3 3-3"/>',
+  };
+
+  // "1-3, 5, 8-10" -> zero-based page indices, clamped and de-duplicated.
+  function parseRange(text, total) {
+    const out = [];
+    const seen = new Set();
+    for (const chunk of String(text || "").split(/[,;]/)) {
+      const part = chunk.trim();
+      if (!part) continue;
+      const m = part.match(/^(\d+)\s*(?:[-–—]\s*(\d+))?$/);
+      if (!m) continue;
+      let a = parseInt(m[1], 10);
+      let b = m[2] ? parseInt(m[2], 10) : a;
+      if (a > b) { const t = a; a = b; b = t; }
+      for (let i = a; i <= b; i++) {
+        const idx = i - 1;
+        if (idx >= 0 && idx < total && !seen.has(idx)) { seen.add(idx); out.push(idx); }
+      }
+    }
+    return out;
+  }
+
+  async function loadPdf(file) {
+    const bytes = await file.arrayBuffer();
+    return PDFDocument.load(bytes, { ignoreEncryption: true });
+  }
+
+  async function pdfPageCount(file) {
+    try { return (await loadPdf(file)).getPageCount(); } catch (err) { return 0; }
+  }
+
+  // Rasterize a PDF page-by-page via pdf.js; `scale` trades size against sharpness.
+  async function rasterizePdf(file, scale, quality, onProgress) {
+    const data = await file.arrayBuffer();
+    const doc = await pdfjsLib.getDocument({ data }).promise;
+    const out = [];
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    try {
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const vp = page.getViewport({ scale });
+        canvas.width = Math.max(1, Math.round(vp.width));
+        canvas.height = Math.max(1, Math.round(vp.height));
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", quality));
+        out.push({ blob, w: canvas.width, h: canvas.height });
+        page.cleanup();
+        onProgress && onProgress(i, doc.numPages);
+      }
+    } finally {
+      canvas.width = canvas.height = 0;
+      await doc.destroy().catch(() => {});
+    }
+    return out;
+  }
+
+  const TOOLS = [
+    {
+      id: "merge",
+      title: "Об'єднати PDF",
+      sub: "Кілька файлів — в один документ",
+      icon: ICONS.merge,
+      accept: ".pdf,application/pdf",
+      multiple: true,
+      dz: "Обери кілька PDF",
+      dzSub: "Порядок сторінок = порядок, у якому ти обрала файли",
+      minFiles: 2,
+      runLabel: "Об'єднати",
+      async run(files, opts, onProgress) {
+        const out = await PDFDocument.create();
+        for (let i = 0; i < files.length; i++) {
+          const src = await loadPdf(files[i]);
+          const pages = await out.copyPages(src, src.getPageIndices());
+          pages.forEach((p) => out.addPage(p));
+          onProgress(i + 1, files.length);
+        }
+        return { bytes: await out.save(), name: "обʼєднано.pdf", type: "application/pdf" };
+      },
+    },
+    {
+      id: "split",
+      title: "Витягти сторінки",
+      sub: "Зберегти лише потрібні сторінки",
+      icon: ICONS.split,
+      accept: ".pdf,application/pdf",
+      dz: "Обери PDF",
+      dzSub: "Далі вкажеш, які сторінки залишити",
+      options: [{ key: "range", label: "Сторінки", type: "text", placeholder: "напр. 1-3, 5", value: "" }],
+      runLabel: "Витягти",
+      async run(files, opts, onProgress) {
+        const src = await loadPdf(files[0]);
+        const idx = parseRange(opts.range, src.getPageCount());
+        if (!idx.length) throw new Error("empty-range");
+        const out = await PDFDocument.create();
+        const pages = await out.copyPages(src, idx);
+        pages.forEach((p) => out.addPage(p));
+        onProgress(1, 1);
+        return { bytes: await out.save(), name: "сторінки.pdf", type: "application/pdf" };
+      },
+    },
+    {
+      id: "remove",
+      title: "Видалити сторінки",
+      sub: "Прибрати зайві сторінки з PDF",
+      icon: ICONS.trash,
+      accept: ".pdf,application/pdf",
+      dz: "Обери PDF",
+      dzSub: "Далі вкажеш, які сторінки прибрати",
+      options: [{ key: "range", label: "Прибрати", type: "text", placeholder: "напр. 2, 7-9", value: "" }],
+      runLabel: "Видалити",
+      async run(files, opts, onProgress) {
+        const src = await loadPdf(files[0]);
+        const drop = new Set(parseRange(opts.range, src.getPageCount()));
+        if (!drop.size) throw new Error("empty-range");
+        const keep = src.getPageIndices().filter((i) => !drop.has(i));
+        if (!keep.length) throw new Error("nothing-left");
+        const out = await PDFDocument.create();
+        const pages = await out.copyPages(src, keep);
+        pages.forEach((p) => out.addPage(p));
+        onProgress(1, 1);
+        return { bytes: await out.save(), name: "без_зайвого.pdf", type: "application/pdf" };
+      },
+    },
+    {
+      id: "rotate",
+      title: "Повернути сторінки",
+      sub: "Виправити орієнтацію сканів",
+      icon: ICONS.rotate,
+      accept: ".pdf,application/pdf",
+      dz: "Обери PDF",
+      dzSub: "Можна повернути весь файл або окремі сторінки",
+      options: [
+        { key: "angle", label: "Кут", type: "select", value: "90",
+          choices: [["90", "90° за годинниковою"], ["180", "180°"], ["270", "90° проти годинникової"]] },
+        { key: "range", label: "Сторінки", type: "text", placeholder: "порожньо = усі", value: "" },
+      ],
+      runLabel: "Повернути",
+      async run(files, opts, onProgress) {
+        const doc = await loadPdf(files[0]);
+        const total = doc.getPageCount();
+        const idx = opts.range && opts.range.trim() ? parseRange(opts.range, total) : doc.getPageIndices();
+        if (!idx.length) throw new Error("empty-range");
+        const add = parseInt(opts.angle, 10);
+        idx.forEach((i) => {
+          const page = doc.getPage(i);
+          page.setRotation(PDFLib.degrees((page.getRotation().angle + add) % 360));
+        });
+        onProgress(1, 1);
+        return { bytes: await doc.save(), name: "повернуто.pdf", type: "application/pdf" };
+      },
+    },
+    {
+      id: "compress",
+      title: "Стиснути PDF",
+      sub: "Зменшити вагу важкого файлу",
+      icon: ICONS.zip,
+      accept: ".pdf,application/pdf",
+      dz: "Обери PDF",
+      dzSub: "Сторінки перезбираються як зображення — текст перестане виділятись",
+      options: [
+        { key: "level", label: "Стиснення", type: "select", value: "medium",
+          choices: [["light", "Легке — якість краща"], ["medium", "Середнє"], ["strong", "Сильне — файл найменший"]] },
+      ],
+      runLabel: "Стиснути",
+      async run(files, opts, onProgress) {
+        const presets = { light: [1.6, 0.82], medium: [1.2, 0.68], strong: [0.9, 0.5] };
+        const [scale, quality] = presets[opts.level] || presets.medium;
+        const shots = await rasterizePdf(files[0], scale, quality, onProgress);
+        const out = await PDFDocument.create();
+        for (const s of shots) {
+          const img = await out.embedJpg(await s.blob.arrayBuffer());
+          const page = out.addPage([s.w, s.h]);
+          page.drawImage(img, { x: 0, y: 0, width: s.w, height: s.h });
+        }
+        return { bytes: await out.save(), name: "стиснуто.pdf", type: "application/pdf" };
+      },
+    },
+    {
+      id: "pdf2img",
+      title: "PDF → фото",
+      sub: "Кожна сторінка окремим JPG",
+      icon: ICONS.toPhoto,
+      accept: ".pdf,application/pdf",
+      dz: "Обери PDF",
+      dzSub: "Отримаєш ZIP із фото, по одному на сторінку",
+      options: [
+        { key: "quality", label: "Якість", type: "select", value: "2",
+          choices: [["1.4", "Звичайна"], ["2", "Висока"], ["3", "Максимальна"]] },
+      ],
+      runLabel: "Перетворити",
+      async run(files, opts, onProgress) {
+        const shots = await rasterizePdf(files[0], Number(opts.quality), 0.92, onProgress);
+        const zip = await getJSZip();
+        const base = sanitizeName(files[0].name);
+        shots.forEach((s, i) => zip.file(`${base}_${i + 1}.jpg`, s.blob));
+        const blob = await zip.generateAsync({ type: "blob" });
+        return { blob, name: base + "_фото.zip", type: "application/zip" };
+      },
+    },
+    {
+      id: "img2pdf",
+      title: "Фото → PDF",
+      sub: "Зібрати знімки в один документ",
+      icon: ICONS.toPdf,
+      accept: "image/jpeg,image/png,.jpg,.jpeg,.png",
+      multiple: true,
+      dz: "Обери фото",
+      dzSub: "JPG або PNG · порядок = порядок вибору",
+      options: [
+        { key: "size", label: "Сторінка", type: "select", value: "fit",
+          choices: [["fit", "Під розмір фото"], ["a4", "A4 з полями"]] },
+      ],
+      runLabel: "Зібрати PDF",
+      async run(files, opts, onProgress) {
+        const out = await PDFDocument.create();
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          const bytes = await f.arrayBuffer();
+          const isPng = /png$/i.test(f.type) || /\.png$/i.test(f.name);
+          const img = isPng ? await out.embedPng(bytes) : await out.embedJpg(bytes);
+          if (opts.size === "a4") {
+            const [pw, ph] = [595.28, 841.89];
+            const page = out.addPage([pw, ph]);
+            const m = 28;
+            const s = Math.min((pw - m * 2) / img.width, (ph - m * 2) / img.height);
+            const w = img.width * s, h = img.height * s;
+            page.drawImage(img, { x: (pw - w) / 2, y: (ph - h) / 2, width: w, height: h });
+          } else {
+            const page = out.addPage([img.width, img.height]);
+            page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+          }
+          onProgress(i + 1, files.length);
+        }
+        return { bytes: await out.save(), name: "фото.pdf", type: "application/pdf" };
+      },
+    },
+  ];
+
+  function renderToolsGrid() {
+    toolEls.grid.innerHTML = "";
+    TOOLS.forEach((t) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tool-card";
+      b.innerHTML =
+        '<span class="tool-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+        'stroke-linecap="round" stroke-linejoin="round">' + t.icon + "</svg></span>" +
+        "<strong></strong><span class='tool-sub'></span>";
+      b.querySelector("strong").textContent = t.title;
+      b.querySelector(".tool-sub").textContent = t.sub;
+      b.addEventListener("click", () => openTool(t));
+      toolEls.grid.appendChild(b);
+    });
+  }
+
+  function openTool(tool) {
+    activeTool = tool;
+    toolFiles = [];
+    toolEls.grid.classList.add("hidden");
+    toolEls.runner.classList.remove("hidden");
+    toolEls.title.textContent = tool.title;
+    toolEls.desc.textContent = tool.sub;
+    toolEls.dzTitle.textContent = tool.dz || "Обрати файл";
+    toolEls.dzSub.textContent = tool.dzSub || "";
+    toolEls.input.value = "";
+    toolEls.input.accept = tool.accept || "";
+    toolEls.input.multiple = !!tool.multiple;
+    toolEls.runLabel.textContent = tool.runLabel || "Зробити";
+
+    toolEls.options.innerHTML = "";
+    (tool.options || []).forEach((opt) => {
+      const row = document.createElement("div");
+      row.className = "tool-field";
+      const lab = document.createElement("label");
+      lab.textContent = opt.label;
+      lab.htmlFor = "toolopt-" + opt.key;
+      let field;
+      if (opt.type === "select") {
+        field = document.createElement("select");
+        opt.choices.forEach(([v, text]) => {
+          const o = document.createElement("option");
+          o.value = v; o.textContent = text;
+          field.appendChild(o);
+        });
+      } else {
+        field = document.createElement("input");
+        field.type = "text";
+        field.placeholder = opt.placeholder || "";
+      }
+      field.id = "toolopt-" + opt.key;
+      field.dataset.key = opt.key;
+      field.value = opt.value == null ? "" : opt.value;
+      row.appendChild(lab);
+      row.appendChild(field);
+      toolEls.options.appendChild(row);
+    });
+
+    renderToolFiles();
+  }
+
+  function closeTool() {
+    activeTool = null;
+    toolFiles = [];
+    toolEls.runner.classList.add("hidden");
+    toolEls.grid.classList.remove("hidden");
+  }
+
+  function renderToolFiles() {
+    toolEls.fileList.innerHTML = "";
+    toolFiles.forEach((f, i) => {
+      const li = document.createElement("li");
+      li.className = "job-card";
+      const info = document.createElement("div");
+      info.className = "job-info";
+      const name = document.createElement("span");
+      name.className = "job-name";
+      name.style.border = "none";
+      name.style.background = "transparent";
+      name.textContent = f.name;
+      const meta = document.createElement("span");
+      meta.className = "job-meta";
+      meta.textContent = (f.size / 1024 / 1024).toFixed(2) + " МБ" + (f.pageCount ? ` · ${f.pageCount} стор.` : "");
+      info.appendChild(name);
+      info.appendChild(meta);
+      const rm = document.createElement("button");
+      rm.className = "job-remove";
+      rm.type = "button";
+      rm.setAttribute("aria-label", "Прибрати файл");
+      rm.textContent = "✕";
+      rm.addEventListener("click", () => { toolFiles.splice(i, 1); renderToolFiles(); });
+      li.appendChild(info);
+      li.appendChild(rm);
+      toolEls.fileList.appendChild(li);
+    });
+    const need = activeTool ? (activeTool.minFiles || 1) : 1;
+    toolEls.run.disabled = toolBusy || toolFiles.length < need;
+    toolEls.dzTitle.textContent = toolFiles.length
+      ? (activeTool && activeTool.multiple ? "Додати ще" : "Обрати інший файл")
+      : (activeTool ? activeTool.dz : "Обрати файл");
+  }
+
+  async function addToolFiles(list) {
+    const files = Array.from(list || []);
+    if (!files.length) return;
+    if (activeTool && activeTool.multiple) toolFiles.push(...files);
+    else toolFiles = [files[0]];
+    // Page counts make it obvious which file you're about to operate on.
+    for (const f of toolFiles) {
+      if (f.pageCount == null && /pdf$/i.test(f.type + f.name)) {
+        f.pageCount = await pdfPageCount(f);
+      }
+    }
+    renderToolFiles();
+  }
+
+  function setToolBusy(on) {
+    toolBusy = on;
+    toolEls.spinner.classList.toggle("hidden", !on);
+    toolEls.progressTrack.classList.toggle("hidden", !on);
+    toolEls.run.disabled = on || toolFiles.length < (activeTool && activeTool.minFiles || 1);
+    if (!on) {
+      toolEls.progressFill.style.width = "0%";
+      toolEls.runLabel.textContent = activeTool ? (activeTool.runLabel || "Зробити") : "Зробити";
+    }
+  }
+
+  function readToolOptions() {
+    const opts = {};
+    toolEls.options.querySelectorAll("[data-key]").forEach((el) => { opts[el.dataset.key] = el.value; });
+    return opts;
+  }
+
+  async function runTool() {
+    if (!activeTool || toolBusy) return;
+    setToolBusy(true);
+    try {
+      const onProgress = (done, total) => {
+        toolEls.progressFill.style.width = Math.round((done / total) * 100) + "%";
+        toolEls.runLabel.textContent = total > 1 ? `Обробка… ${done}/${total}` : "Обробка…";
+      };
+      const res = await activeTool.run(toolFiles, readToolOptions(), onProgress);
+      const blob = res.blob || new Blob([res.bytes], { type: res.type });
+      const outcome = await deliverBlob(blob, res.name, res.type);
+      if (outcome !== "cancelled") {
+        await saveHistoryEntry({
+          name: res.name, format: res.type === "application/zip" ? "pdf-zip" : "pdf",
+          pageCount: 0, blob, blobName: res.name, thumbSource: null,
+        });
+        showToast("Готово — файл збережено", "success");
+        celebrate(toolEls.run);
+      }
+    } catch (err) {
+      const known = {
+        "empty-range": "Вкажи сторінки, напр. 1-3, 5",
+        "nothing-left": "Не можна видалити всі сторінки",
+      };
+      const msg = err && known[err.message];
+      // Only real failures are worth a console entry; bad input is just input.
+      if (!msg) console.error(err);
+      showToast(msg || "Не вдалося обробити файл — можливо, він пошкоджений або захищений паролем", "error", 4200);
+    } finally {
+      setToolBusy(false);
+    }
+  }
+
+  function setMode(mode) {
+    const tools = mode === "tools";
+    toolEls.panelTools.classList.toggle("hidden", !tools);
+    toolEls.panelWorkspace.classList.toggle("hidden", tools);
+    els.panelHistory.classList.add("hidden");
+    [...toolEls.modeSwitch.children].forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+    if (tools) closeColorPop();
+  }
+
+  function initTools() {
+    renderToolsGrid();
+    toolEls.modeSwitch.addEventListener("click", (e) => {
+      const btn = e.target.closest(".mode-btn");
+      if (btn) setMode(btn.dataset.mode);
+    });
+    toolEls.back.addEventListener("click", closeTool);
+    toolEls.input.addEventListener("change", () => addToolFiles(toolEls.input.files));
+    toolEls.run.addEventListener("click", runTool);
+
+    ["dragenter", "dragover"].forEach((ev) => toolEls.dropzone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      toolEls.dropzone.classList.add("dragover");
+    }));
+    ["dragleave", "drop"].forEach((ev) => toolEls.dropzone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      toolEls.dropzone.classList.remove("dragover");
+      if (ev === "drop" && e.dataTransfer) addToolFiles(e.dataTransfer.files);
+    }));
+  }
+
   // ---------- history (IndexedDB) ----------
 
   const DB_NAME = "glamaterials";
@@ -2182,7 +2667,8 @@
   async function saveHistoryEntry({ name, format, pageCount, blob, blobName, thumbSource }) {
     try {
       if (blob.size > MAX_HISTORY_ITEM_BYTES) { console.warn("history: result too large, skipping save"); return; }
-      const thumb = await makeThumbDataUrl(thumbSource, 120);
+      // Tool results (a merged PDF, a ZIP) have no page image to thumbnail.
+      const thumb = thumbSource ? await makeThumbDataUrl(thumbSource, 120) : null;
       const id = "h" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
       await historyAdd({ id, name, format, pageCount, createdAt: Date.now(), thumb, blob, blobName });
       await historyEnforceCap();
@@ -2197,7 +2683,8 @@
     const dateStr = date.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" }) + " " +
       date.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
     const kind = entry.format === "photos-zip" ? "фото (zip)" : entry.format === "pdf-zip" ? "PDF (zip)" : "PDF";
-    return `${dateStr} · ${entry.pageCount} стор. · ${kind}`;
+    const pages = entry.pageCount ? `${entry.pageCount} стор. · ` : "";
+    return `${dateStr} · ${pages}${kind}`;
   }
 
   async function renderHistoryList() {
@@ -2210,7 +2697,8 @@
 
       const img = document.createElement("img");
       img.className = "history-thumb";
-      img.src = entry.thumb;
+      if (entry.thumb) img.src = entry.thumb;
+      else img.classList.add("history-thumb-empty");
 
       const info = document.createElement("div");
       info.className = "history-info";
@@ -2339,6 +2827,7 @@
   })();
   updateDropzoneHint();
   initEditorUI();
+  initTools();
 
   loadImageFromDataUri(WATERMARK_DATA_URI).then((img) => { watermarkImg = img; }).catch((err) => {
     console.error(err);

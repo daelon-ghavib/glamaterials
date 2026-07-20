@@ -1193,6 +1193,116 @@ input[type="range"]:disabled { opacity: 0.5; cursor: default; }
 .insp-row-block { flex-direction: column; align-items: stretch; gap: 8px; }
 .insp-row-block > label { min-width: 0; }
 
+/* ---------- tools ---------- */
+
+.mode-switch {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  margin-bottom: 16px;
+  background: var(--cream-d);
+  border-radius: var(--pill);
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 11px 14px;
+  border: none;
+  border-radius: var(--pill);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--t) var(--ease), color var(--t) var(--ease), box-shadow var(--t) var(--ease);
+}
+
+.mode-btn.active {
+  background: var(--white);
+  color: var(--ink);
+  box-shadow: 0 4px 12px rgba(61, 31, 45, 0.12);
+}
+
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: 10px;
+}
+
+.tool-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 15px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  background: var(--white);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color var(--t) var(--ease), transform var(--t) var(--ease), box-shadow var(--t) var(--ease);
+  animation: fadeSlideUp 0.3s var(--ease);
+}
+
+.tool-card:hover {
+  border-color: var(--border-md);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(61, 31, 45, 0.12);
+}
+
+.tool-card .tool-ico {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--blush-soft);
+  color: var(--mark);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-card .tool-ico svg { width: 19px; height: 19px; }
+.tool-card strong { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.tool-card span.tool-sub { font-size: 11.5px; line-height: 1.4; color: var(--ink-soft); opacity: 0.85; }
+
+.tool-runner { display: flex; flex-direction: column; gap: 14px; }
+
+.runner-head { display: flex; align-items: flex-start; gap: 10px; }
+.runner-head-text h2 { margin: 0; font-family: var(--ff-disp); font-size: 24px; font-weight: 700; }
+.runner-head-text p { margin: 3px 0 0; font-size: 12.5px; color: var(--ink-soft); opacity: 0.85; line-height: 1.45; }
+
+.tool-options { display: flex; flex-direction: column; gap: 10px; }
+.tool-options:empty { display: none; }
+
+.tool-field { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.tool-field > label { flex: 0 0 auto; min-width: 120px; color: var(--ink-soft); }
+.tool-field input[type="text"],
+.tool-field select {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+
+.tool-field input[type="text"]:focus,
+.tool-field select:focus {
+  outline: none;
+  border-color: var(--champagne);
+  box-shadow: 0 0 0 3px rgba(232, 132, 154, 0.18);
+}
+
+.tool-hint { margin: 0; font-size: 11.5px; color: var(--ink-soft); opacity: 0.8; }
+
+/* Tool results have no page image to preview. */
+.history-thumb-empty { background: var(--cream-d); box-shadow: inset 0 0 0 1px var(--border); }
+
 .crop-bar {
   display: flex;
   flex-direction: column;

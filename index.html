@@ -35,6 +35,48 @@
 
   <main class="stage">
 
+    <div class="mode-switch" id="mode-switch" role="tablist">
+      <button type="button" class="mode-btn active" data-mode="brand">Брендування</button>
+      <button type="button" class="mode-btn" data-mode="tools">Інструменти</button>
+    </div>
+
+    <section id="panel-tools" class="panel hidden">
+      <div id="tools-grid" class="tools-grid"></div>
+
+      <div id="tool-runner" class="tool-runner hidden">
+        <div class="runner-head">
+          <button type="button" class="icon-btn" id="tool-back" aria-label="Назад до списку">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <div class="runner-head-text">
+            <h2 id="tool-title">Інструмент</h2>
+            <p id="tool-desc"></p>
+          </div>
+        </div>
+
+        <label for="tool-input" class="dropzone compact" id="tool-dropzone">
+          <input type="file" id="tool-input" hidden>
+          <span class="dropzone-icon-wrap">
+            <svg class="dropzone-icon" viewBox="0 0 48 48" fill="none">
+              <path d="M24 6v24m0 0 9-9m-9 9-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M8 34v4a4 4 0 0 0 4 4h24a4 4 0 0 0 4-4v-4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <p class="dropzone-title" id="tool-dropzone-title">Обрати файл</p>
+          <p class="dropzone-sub" id="tool-dropzone-sub"></p>
+        </label>
+
+        <ul id="tool-files" class="job-list"></ul>
+        <div id="tool-options" class="tool-options"></div>
+
+        <button id="tool-run" class="btn-primary" type="button" disabled>
+          <span id="tool-run-label">Зробити</span>
+          <span id="tool-spinner" class="btn-spinner hidden" aria-hidden="true"></span>
+        </button>
+        <div id="tool-progress-track" class="progress-track hidden"><div id="tool-progress-fill" class="progress-fill"></div></div>
+      </div>
+    </section>
+
     <section id="panel-workspace" class="panel panel-workspace">
 
       <div class="segmented-row">
