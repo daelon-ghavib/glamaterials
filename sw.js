@@ -1,4 +1,4 @@
-const CACHE = "glamaterials-v10";
+const CACHE = "glamaterials-v11";
 const SHELL = [
   "./",
   "./index.html",

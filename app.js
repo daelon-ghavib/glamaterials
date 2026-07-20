@@ -57,10 +57,16 @@
     insSize: document.getElementById("ins-size"),
     insSizeVal: document.getElementById("ins-size-val"),
     insAlign: document.getElementById("ins-align"),
-    insColor: document.getElementById("ins-color"),
-    insFill: document.getElementById("ins-fill"),
-    insBg: document.getElementById("ins-bg"),
-    insStroke: document.getElementById("ins-stroke"),
+    insPlace: document.getElementById("ins-place"),
+    undoBtn: document.getElementById("undo-btn"),
+    redoBtn: document.getElementById("redo-btn"),
+    imageInput: document.getElementById("image-input"),
+    colorPop: document.getElementById("color-pop"),
+    colorPopGrid: document.getElementById("color-pop-grid"),
+    colorPopRecent: document.getElementById("color-pop-recent"),
+    colorPopRecentTitle: document.getElementById("color-pop-recent-title"),
+    colorPopInput: document.getElementById("color-pop-input"),
+    colorPopNone: document.getElementById("color-pop-none"),
     insStrokeW: document.getElementById("ins-stroke-w"),
     insStrokeWVal: document.getElementById("ins-stroke-w-val"),
     insRadius: document.getElementById("ins-radius"),
@@ -69,7 +75,6 @@
     insRotVal: document.getElementById("ins-rot-val"),
     insOpacity: document.getElementById("ins-opacity"),
     insOpacityVal: document.getElementById("ins-opacity-val"),
-    insSwatches: document.getElementById("ins-swatches"),
     previewPrev: document.getElementById("preview-prev"),
     previewNext: document.getElementById("preview-next"),
     pageCountBadge: document.getElementById("page-count-badge"),
@@ -443,6 +448,10 @@
     pendingQueue.length = 0;
     previewIndex = 0;
     annotations.clear();
+    imageCache.clear();
+    undoStack.length = 0;
+    redoStack.length = 0;
+    updateHistoryButtons();
     selectedId = null;
     renderJobList();
     updateDropzoneMode();
@@ -681,19 +690,89 @@
     { label: "Comic Sans MS", css: "'Comic Sans MS', 'Comic Sans', cursive" },
   ];
 
-  const SWATCHES = ["#3D1F2D", "#E8849A", "#9D2F7F", "#B04060", "#FFFFFF",
-                    "#000000", "#2E7D32", "#1565C0", "#F9A825", "#D32F2F"];
+  const SWATCHES = [
+    "#3D1F2D", "#E8849A", "#9D2F7F", "#B04060", "#F2A0B8",
+    "#FFFFFF", "#000000", "#6B7280", "#2E7D32", "#1565C0",
+    "#F9A825", "#D32F2F", "#7B3FA0", "#0F766E", "#C2410C",
+  ];
+  const RECENT_KEY = "glamaterials_recent_colors";
+  const MAX_RECENT = 5;
 
-  const TYPE_LABEL = { text: "Текст", rect: "Прямокутник", ellipse: "Овал", line: "Лінія", arrow: "Стрілка" };
+  const TYPE_LABEL = {
+    text: "Текст", rect: "Прямокутник", ellipse: "Овал",
+    line: "Лінія", arrow: "Стрілка", image: "Фото",
+  };
   const LINE_H = 1.25;
   const MIN_SIZE = 14;
+  const SNAP_PX = 7; // in screen pixels; converted to canvas units at drag time
 
   const annotations = new Map(); // pageKey -> annotation[]
   const measureCtx = document.createElement("canvas").getContext("2d");
+  const imageCache = new Map(); // annotation id -> HTMLImageElement
   let annIdCounter = 0;
   let selectedId = null;
   let armedTool = null;
   let drag = null;
+  let activeGuides = [];
+  let recentColors = [];
+
+  // ----- undo / redo -----
+
+  const undoStack = [];
+  const redoStack = [];
+  const MAX_UNDO = 60;
+  let lastHistoryTag = null;
+  let lastHistoryAt = 0;
+
+  function snapshot() {
+    const out = {};
+    annotations.forEach((list, key) => { out[key] = list.map((a) => Object.assign({}, a)); });
+    return out;
+  }
+
+  function restoreSnapshot(snap) {
+    annotations.clear();
+    Object.keys(snap).forEach((k) => annotations.set(k, snap[k].map((a) => Object.assign({}, a))));
+    if (!currentAnns().some((a) => a.id === selectedId)) selectedId = null;
+  }
+
+  // `tag` coalesces bursts: dragging a slider records one undo step, not eighty.
+  function pushHistory(tag) {
+    const now = Date.now();
+    if (tag && tag === lastHistoryTag && now - lastHistoryAt < 900) {
+      lastHistoryAt = now;
+      return;
+    }
+    lastHistoryTag = tag || null;
+    lastHistoryAt = now;
+    undoStack.push(snapshot());
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack.length = 0;
+    updateHistoryButtons();
+  }
+
+  function updateHistoryButtons() {
+    els.undoBtn.disabled = undoStack.length === 0;
+    els.redoBtn.disabled = redoStack.length === 0;
+  }
+
+  function undo() {
+    if (!undoStack.length) return;
+    redoStack.push(snapshot());
+    restoreSnapshot(undoStack.pop());
+    lastHistoryTag = null;
+    updateHistoryButtons();
+    refreshEditor();
+  }
+
+  function redo() {
+    if (!redoStack.length) return;
+    undoStack.push(snapshot());
+    restoreSnapshot(redoStack.pop());
+    lastHistoryTag = null;
+    updateHistoryButtons();
+    refreshEditor();
+  }
 
   function annsFor(key) {
     if (!key) return [];
@@ -814,6 +893,37 @@
     }
   }
 
+  function imageFor(a) {
+    let img = imageCache.get(a.id);
+    if (!img) {
+      img = new Image();
+      img.onload = () => { updatePreview(); };
+      img.src = a.src;
+      imageCache.set(a.id, img);
+    }
+    return img;
+  }
+
+  function drawImageAnn(ctx, a) {
+    const img = imageFor(a);
+    if (!img.complete || !img.naturalWidth) return;
+    if (a.radius > 0) {
+      ctx.save();
+      pathRoundRect(ctx, a.x, a.y, a.w, a.h, a.radius);
+      ctx.clip();
+      ctx.drawImage(img, a.x, a.y, a.w, a.h);
+      ctx.restore();
+    } else {
+      ctx.drawImage(img, a.x, a.y, a.w, a.h);
+    }
+    if (a.stroke && a.strokeW > 0) {
+      pathRoundRect(ctx, a.x, a.y, a.w, a.h, a.radius || 0);
+      ctx.lineWidth = a.strokeW;
+      ctx.strokeStyle = a.stroke;
+      ctx.stroke();
+    }
+  }
+
   function drawAnnotations(ctx, list) {
     for (const a of list) {
       ctx.save();
@@ -826,6 +936,8 @@
         if (a.rot) { ctx.translate(cx, cy); ctx.rotate(a.rot); ctx.translate(-cx, -cy); }
         if (a.type === "text") {
           drawTextAnn(ctx, a);
+        } else if (a.type === "image") {
+          drawImageAnn(ctx, a);
         } else {
           if (a.type === "rect") pathRoundRect(ctx, a.x, a.y, a.w, a.h, a.radius || 0);
           else { ctx.beginPath(); ctx.ellipse(cx, cy, Math.abs(a.w) / 2, Math.abs(a.h) / 2, 0, 0, Math.PI * 2); }
@@ -835,6 +947,105 @@
       }
       ctx.restore();
     }
+  }
+
+  // ----- smart guides -----
+  // While dragging we compare the moved element's left/centre/right (and top/
+  // middle/bottom) against the page's own edges and centre plus every other
+  // element's edges, and pull to whichever is closest inside the threshold.
+
+  function edgesOf(a) {
+    if (isLine(a)) {
+      const x = Math.min(a.x1, a.x2), y = Math.min(a.y1, a.y2);
+      const w = Math.abs(a.x2 - a.x1), h = Math.abs(a.y2 - a.y1);
+      return { x, y, w, h };
+    }
+    return { x: a.x, y: a.y, w: a.w, h: a.h };
+  }
+
+  function snapTargets(exceptId) {
+    const t = tpl();
+    const margin = Math.round(Math.min(t.canvasW, t.canvasH) * 0.06);
+    const xs = [
+      { v: margin, kind: "edge" },
+      { v: t.canvasW / 2, kind: "center" },
+      { v: t.canvasW - margin, kind: "edge" },
+    ];
+    const ys = [
+      { v: margin, kind: "edge" },
+      { v: t.canvasH / 2, kind: "center" },
+      { v: t.canvasH - margin, kind: "edge" },
+    ];
+    for (const o of currentAnns()) {
+      if (o.id === exceptId) continue;
+      const e = edgesOf(o);
+      xs.push({ v: e.x, kind: "obj" }, { v: e.x + e.w / 2, kind: "obj" }, { v: e.x + e.w, kind: "obj" });
+      ys.push({ v: e.y, kind: "obj" }, { v: e.y + e.h / 2, kind: "obj" }, { v: e.y + e.h, kind: "obj" });
+    }
+    return { xs, ys };
+  }
+
+  // Returns {dx, dy} nudges plus the guide lines to draw for this frame.
+  function computeSnap(a) {
+    const tol = SNAP_PX * overlayScale();
+    const e = edgesOf(a);
+    const { xs, ys } = snapTargets(a.id);
+    const guides = [];
+    let dx = 0, dy = 0;
+
+    const mine = [
+      { at: e.x, off: 0 },
+      { at: e.x + e.w / 2, off: e.w / 2 },
+      { at: e.x + e.w, off: e.w },
+    ];
+    let bestX = null;
+    for (const m of mine) {
+      for (const s of xs) {
+        const d = s.v - m.at;
+        if (Math.abs(d) <= tol && (!bestX || Math.abs(d) < Math.abs(bestX.d))) bestX = { d, v: s.v };
+      }
+    }
+    if (bestX) { dx = bestX.d; guides.push({ axis: "x", v: bestX.v }); }
+
+    const mineY = [
+      { at: e.y, off: 0 },
+      { at: e.y + e.h / 2, off: e.h / 2 },
+      { at: e.y + e.h, off: e.h },
+    ];
+    let bestY = null;
+    for (const m of mineY) {
+      for (const s of ys) {
+        const d = s.v - m.at;
+        if (Math.abs(d) <= tol && (!bestY || Math.abs(d) < Math.abs(bestY.d))) bestY = { d, v: s.v };
+      }
+    }
+    if (bestY) { dy = bestY.d; guides.push({ axis: "y", v: bestY.v }); }
+
+    return { dx, dy, guides };
+  }
+
+  function applySnap(a) {
+    const { dx, dy, guides } = computeSnap(a);
+    if (dx || dy) moveAnn(a, dx, dy);
+    activeGuides = guides;
+  }
+
+  function moveAnn(a, dx, dy) {
+    if (isLine(a)) { a.x1 += dx; a.y1 += dy; a.x2 += dx; a.y2 += dy; }
+    else { a.x += dx; a.y += dy; }
+  }
+
+  function placeOnPage(a, where) {
+    const t = tpl();
+    const e = edgesOf(a);
+    const margin = Math.round(Math.min(t.canvasW, t.canvasH) * 0.06);
+    if (where === "left") moveAnn(a, margin - e.x, 0);
+    else if (where === "right") moveAnn(a, t.canvasW - margin - (e.x + e.w), 0);
+    else if (where === "centerX") moveAnn(a, t.canvasW / 2 - (e.x + e.w / 2), 0);
+    else if (where === "top") moveAnn(a, 0, margin - e.y);
+    else if (where === "bottom") moveAnn(a, 0, t.canvasH - margin - (e.y + e.h));
+    else if (where === "centerY") moveAnn(a, 0, t.canvasH / 2 - (e.y + e.h / 2));
+    else if (where === "middle") moveAnn(a, t.canvasW / 2 - (e.x + e.w / 2), t.canvasH / 2 - (e.y + e.h / 2));
   }
 
   // ----- geometry helpers -----
@@ -894,13 +1105,31 @@
     ctx.stroke();
   }
 
+  function drawGuides(ctx, s) {
+    if (!activeGuides.length) return;
+    const cv = els.editorOverlay;
+    ctx.save();
+    ctx.strokeStyle = "#9D2F7F";
+    ctx.lineWidth = 1.4 * s;
+    ctx.setLineDash([9 * s, 6 * s]);
+    for (const g of activeGuides) {
+      ctx.beginPath();
+      if (g.axis === "x") { ctx.moveTo(g.v, 0); ctx.lineTo(g.v, cv.height); }
+      else { ctx.moveTo(0, g.v); ctx.lineTo(cv.width, g.v); }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawOverlay() {
     const cv = els.editorOverlay;
     const ctx = cv.getContext("2d");
     ctx.clearRect(0, 0, cv.width, cv.height);
+    const s0 = overlayScale();
+    drawGuides(ctx, s0);
     const a = selectedAnn();
     if (!a) return;
-    const s = overlayScale();
+    const s = s0;
     ctx.save();
     ctx.strokeStyle = "#9D2F7F";
     ctx.fillStyle = "#FFFFFF";
@@ -975,6 +1204,9 @@
         radius: type === "rect" ? Math.round(base * 0.014) : 0, rot: 0, opacity: 1,
       };
     }
+    if (type === "image") {
+      return { src: "", stroke: null, strokeW: 0, radius: 0, rot: 0, opacity: 1 };
+    }
     return { stroke: "#B04060", strokeW: Math.round(sw * 1.7), dashed: false, opacity: 1 };
   }
 
@@ -1024,10 +1256,11 @@
   function onPointerDown(e) {
     if (!currentKey()) return;
     const p = evtPoint(e);
-    els.editorOverlay.setPointerCapture(e.pointerId);
+    try { els.editorOverlay.setPointerCapture(e.pointerId); } catch (err) { /* no capture on this pointer */ }
 
     if (armedTool) {
       const t = tpl();
+      pushHistory(null);
       if (armedTool === "text") {
         const w = Math.min(t.canvasW * 0.6, t.canvasW - p.x - 20);
         addAnnotation("text", { x: p.x, y: p.y, w: Math.max(120, w), h: 0 });
@@ -1050,6 +1283,7 @@
     const sel = selectedAnn();
     if (sel) {
       const handle = hitHandle(sel, p);
+      if (handle) pushHistory(null);
       if (handle === "rot") {
         drag = { mode: "rot", id: sel.id };
         return;
@@ -1069,6 +1303,7 @@
 
     const hit = hitAnn(p);
     if (hit) {
+      pushHistory(null);
       selectedId = hit.id;
       drag = isLine(hit)
         ? { mode: "move", id: hit.id, px: p.x, py: p.y, ox: hit.x1, oy: hit.y1, ox2: hit.x2, oy2: hit.y2 }
@@ -1100,6 +1335,8 @@
       } else {
         a.x = drag.ox + dx; a.y = drag.oy + dy;
       }
+      if (a.type === "text") syncTextHeight(a);
+      if (e.shiftKey) activeGuides = []; else applySnap(a); // Shift = move freely
     } else if (drag.mode === "endpoint") {
       if (drag.which === "p1") { a.x1 = p.x; a.y1 = p.y; } else { a.x2 = p.x; a.y2 = p.y; }
     } else if (drag.mode === "rot") {
@@ -1133,7 +1370,12 @@
   }
 
   function onPointerUp() {
-    if (!drag) return;
+    // Guides must go even if the drag was already torn down (stray/cancelled
+    // pointer), otherwise a stale guide line stays painted over the page.
+    if (!drag) {
+      if (activeGuides.length) { activeGuides = []; drawOverlay(); }
+      return;
+    }
     const a = currentAnns().find((x) => x.id === drag.id);
     if (a) {
       if (drag.mode === "create" && isLine(a) && dist({ x: a.x1, y: a.y1 }, { x: a.x2, y: a.y2 }) < 6) {
@@ -1143,6 +1385,7 @@
       normalizeBox(a);
     }
     drag = null;
+    activeGuides = [];
     refreshEditor();
   }
 
@@ -1152,12 +1395,122 @@
     if (a.type === "text") return ["text", "all"];
     if (a.type === "rect") return ["box", "rect", "all"];
     if (a.type === "ellipse") return ["box", "all"];
+    if (a.type === "image") return ["image", "all"];
     return ["line", "all"];
   }
 
   function setChip(flag, on) {
     const b = els.inspector.querySelector('.chip[data-flag="' + flag + '"]');
     if (b) b.classList.toggle("on", !!on);
+  }
+
+  // ----- colour popover -----
+
+  let colorPopProp = null;
+
+  function loadRecentColors() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+      if (Array.isArray(raw)) recentColors = raw.filter((c) => /^#[0-9a-f]{6}$/i.test(c)).slice(0, MAX_RECENT);
+    } catch (err) { /* private mode — recents are a nicety, not a requirement */ }
+  }
+
+  function rememberColor(hex) {
+    if (!hex) return;
+    recentColors = [hex, ...recentColors.filter((c) => c.toLowerCase() !== hex.toLowerCase())].slice(0, MAX_RECENT);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(recentColors)); } catch (err) { /* non-essential */ }
+  }
+
+  function paintColorBtn(btn, value) {
+    const dot = btn.querySelector(".dot") || (() => {
+      btn.innerHTML = '<span class="dot"></span><span class="label"></span>';
+      return btn.querySelector(".dot");
+    })();
+    const label = btn.querySelector(".label");
+    dot.classList.toggle("none", !value);
+    dot.style.background = value || "";
+    label.textContent = value ? value.toUpperCase() : "Без кольору";
+  }
+
+  function buildSwatchGrid(container, colors, current, onPick) {
+    container.innerHTML = "";
+    colors.forEach((hex) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "swatch" + (current && current.toLowerCase() === hex.toLowerCase() ? " on" : "");
+      b.style.background = hex;
+      b.title = hex;
+      b.addEventListener("click", () => onPick(hex));
+      container.appendChild(b);
+    });
+  }
+
+  function closeColorPop() {
+    els.colorPop.classList.add("hidden");
+    els.inspector.querySelectorAll(".color-btn").forEach((b) => b.classList.remove("open"));
+    colorPopProp = null;
+  }
+
+  function openColorPop(btn) {
+    const a = selectedAnn();
+    if (!a) return;
+    colorPopProp = btn.dataset.color;
+    const current = a[colorPopProp] || null;
+    const nullable = btn.dataset.nullable === "1";
+
+    const pick = (hex) => {
+      pushHistory(null);
+      const sel = selectedAnn();
+      if (!sel) return;
+      sel[colorPopProp] = hex;
+      // Giving a shape an outline colour with zero width would look like nothing happened.
+      if (colorPopProp === "stroke" && hex && !sel.strokeW) {
+        sel.strokeW = Math.max(2, Math.round(Math.min(tpl().canvasW, tpl().canvasH) * 0.005));
+      }
+      rememberColor(hex);
+      closeColorPop();
+      refreshEditor();
+    };
+
+    buildSwatchGrid(els.colorPopGrid, SWATCHES, current, pick);
+    const hasRecent = recentColors.length > 0;
+    els.colorPopRecent.classList.toggle("hidden", !hasRecent);
+    els.colorPopRecentTitle.classList.toggle("hidden", !hasRecent);
+    if (hasRecent) buildSwatchGrid(els.colorPopRecent, recentColors, current, pick);
+
+    els.colorPopInput.value = current || "#E8849A";
+    els.colorPopInput.oninput = () => {
+      const sel = selectedAnn();
+      if (!sel) return;
+      pushHistory("color-custom");
+      sel[colorPopProp] = els.colorPopInput.value;
+      if (colorPopProp === "stroke" && !sel.strokeW) {
+        sel.strokeW = Math.max(2, Math.round(Math.min(tpl().canvasW, tpl().canvasH) * 0.005));
+      }
+      refreshEditor();
+    };
+    els.colorPopInput.onchange = () => rememberColor(els.colorPopInput.value);
+
+    els.colorPopNone.classList.toggle("hidden", !nullable);
+    els.colorPopNone.onclick = () => {
+      pushHistory(null);
+      const sel = selectedAnn();
+      if (sel) sel[colorPopProp] = null;
+      closeColorPop();
+      refreshEditor();
+    };
+
+    els.inspector.querySelectorAll(".color-btn").forEach((b) => b.classList.toggle("open", b === btn));
+    els.colorPop.classList.remove("hidden");
+
+    // Keep the popover on screen next to its button.
+    const r = btn.getBoundingClientRect();
+    const pw = els.colorPop.offsetWidth, ph = els.colorPop.offsetHeight;
+    let left = Math.min(r.right - pw, window.innerWidth - pw - 8);
+    let top = r.bottom + 8;
+    if (top + ph > window.innerHeight - 8) top = Math.max(8, r.top - ph - 8);
+    els.colorPop.style.left = Math.max(8, left) + "px";
+    els.colorPop.style.top = top + "px";
   }
 
   function renderInspector() {
@@ -1178,20 +1531,17 @@
       els.insSizeVal.value = a.size;
       setChip("bold", a.bold); setChip("italic", a.italic); setChip("underline", a.underline);
       els.insAlign.querySelectorAll(".chip").forEach((b) => b.classList.toggle("on", b.dataset.align === a.align));
-      els.insColor.value = a.color;
-      els.insBg.value = a.bg || "#FFFFFF";
-      setChip("dashed", false);
-      els.inspector.querySelector('.chip-none[data-none="bg"]').classList.toggle("on", !a.bg);
     }
-    if (a.type === "rect" || a.type === "ellipse") {
-      els.insFill.value = a.fill || "#FFFFFF";
-      els.inspector.querySelector('.chip-none[data-none="fill"]').classList.toggle("on", !a.fill);
-      if (a.type === "rect") { els.insRadius.value = a.radius || 0; els.insRadiusVal.value = a.radius || 0; }
+    if (a.type === "rect" || a.type === "image") {
+      els.insRadius.value = a.radius || 0;
+      els.insRadiusVal.value = a.radius || 0;
     }
     if (isLine(a)) setChip("dashed", a.dashed);
 
-    els.insStroke.value = a.stroke || "#000000";
-    els.inspector.querySelector('.chip-none[data-none="stroke"]').classList.toggle("on", !a.stroke);
+    els.inspector.querySelectorAll(".color-btn").forEach((btn) => {
+      paintColorBtn(btn, a[btn.dataset.color] || null);
+    });
+
     els.insStrokeW.value = a.strokeW || 0;
     els.insStrokeWVal.value = a.strokeW || 0;
     if (!isLine(a)) {
@@ -1220,26 +1570,63 @@
       els.insFont.appendChild(opt);
     });
 
-    SWATCHES.forEach((hex) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "swatch";
-      b.style.background = hex;
-      b.title = hex;
-      b.addEventListener("click", () => mutateSelected((a) => {
-        // One-tap recolour: fills shapes, tints text, paints line strokes.
-        if (a.type === "text") a.color = hex;
-        else if (isLine(a)) a.stroke = hex;
-        else a.fill = hex;
-      }));
-      els.insSwatches.appendChild(b);
-    });
+    loadRecentColors();
 
     els.toolRow.addEventListener("click", (e) => {
       const btn = e.target.closest(".tool-btn");
       if (!btn) return;
+      if (btn.dataset.tool === "image") {
+        armTool(null);
+        els.imageInput.value = "";
+        els.imageInput.click();
+        return;
+      }
       armTool(armedTool === btn.dataset.tool ? null : btn.dataset.tool);
     });
+
+    els.imageInput.addEventListener("change", () => {
+      const file = els.imageInput.files && els.imageInput.files[0];
+      if (!file || !currentKey()) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const probe = new Image();
+        probe.onload = () => {
+          const t = tpl();
+          // Drop it in at a comfortable size, centred, keeping its aspect ratio.
+          const maxW = t.canvasW * 0.45;
+          const scale = Math.min(maxW / probe.naturalWidth, (t.canvasH * 0.45) / probe.naturalHeight);
+          const w = probe.naturalWidth * scale;
+          const h = probe.naturalHeight * scale;
+          pushHistory(null);
+          addAnnotation("image", {
+            x: (t.canvasW - w) / 2, y: (t.canvasH - h) / 2, w, h, src: reader.result,
+          });
+          refreshEditor();
+          showToast("Фото додано на сторінку", "success");
+        };
+        probe.onerror = () => showToast("Не вдалося прочитати це зображення", "error");
+        probe.src = reader.result;
+      };
+      reader.onerror = () => showToast("Не вдалося прочитати файл", "error");
+      reader.readAsDataURL(file);
+    });
+
+    els.undoBtn.addEventListener("click", undo);
+    els.redoBtn.addEventListener("click", redo);
+
+    els.insPlace.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-place]");
+      if (!btn) return;
+      pushHistory(null);
+      mutateSelected((a) => placeOnPage(a, btn.dataset.place));
+    });
+
+    document.addEventListener("pointerdown", (e) => {
+      if (els.colorPop.classList.contains("hidden")) return;
+      if (els.colorPop.contains(e.target) || e.target.closest(".color-btn")) return;
+      closeColorPop();
+    });
+    window.addEventListener("scroll", () => { if (!els.colorPop.classList.contains("hidden")) closeColorPop(); }, true);
 
     els.editorOverlay.addEventListener("pointerdown", onPointerDown);
     els.editorOverlay.addEventListener("pointermove", onPointerMove);
@@ -1251,11 +1638,18 @@
     });
 
     els.inspector.addEventListener("click", (e) => {
+      const colorBtn = e.target.closest(".color-btn");
+      if (colorBtn) {
+        if (colorBtn.classList.contains("open")) closeColorPop();
+        else openColorPop(colorBtn);
+        return;
+      }
       const act = e.target.closest("[data-act]");
       if (act) {
         const list = currentAnns();
         const a = selectedAnn();
         if (!a) return;
+        pushHistory(null);
         const i = list.indexOf(a);
         if (act.dataset.act === "del") { list.splice(i, 1); selectedId = null; }
         else if (act.dataset.act === "dup") {
@@ -1274,49 +1668,84 @@
         return;
       }
       const flagBtn = e.target.closest(".chip[data-flag]");
-      if (flagBtn) { mutateSelected((a) => { a[flagBtn.dataset.flag] = !a[flagBtn.dataset.flag]; }); return; }
+      if (flagBtn) {
+        pushHistory(null);
+        mutateSelected((a) => { a[flagBtn.dataset.flag] = !a[flagBtn.dataset.flag]; });
+        return;
+      }
       const alignBtn = e.target.closest(".chip[data-align]");
-      if (alignBtn) { mutateSelected((a) => { a.align = alignBtn.dataset.align; }); return; }
-      const noneBtn = e.target.closest(".chip-none[data-none]");
-      if (noneBtn) {
-        const prop = noneBtn.dataset.none === "bg" ? "bg" : noneBtn.dataset.none;
-        mutateSelected((a) => {
-          if (a[prop]) a[prop] = null;
-          else a[prop] = prop === "bg" ? els.insBg.value : prop === "fill" ? els.insFill.value : els.insStroke.value;
-        });
+      if (alignBtn) {
+        pushHistory(null);
+        mutateSelected((a) => { a.align = alignBtn.dataset.align; });
       }
     });
 
-    els.insText.addEventListener("input", () => mutateSelected((a) => { a.text = els.insText.value; }));
-    els.insFont.addEventListener("change", () => mutateSelected((a) => { a.font = els.insFont.value; }));
-    els.insSize.addEventListener("input", () => mutateSelected((a) => { a.size = Number(els.insSize.value); }));
-    els.insColor.addEventListener("input", () => mutateSelected((a) => { a.color = els.insColor.value; }));
-    els.insFill.addEventListener("input", () => mutateSelected((a) => { a.fill = els.insFill.value; }));
-    els.insBg.addEventListener("input", () => mutateSelected((a) => { a.bg = els.insBg.value; }));
-    els.insStroke.addEventListener("input", () => mutateSelected((a) => {
-      a.stroke = els.insStroke.value;
-      if (!a.strokeW) a.strokeW = Math.max(2, Math.round(Math.min(tpl().canvasW, tpl().canvasH) * 0.005));
-    }));
-    els.insStrokeW.addEventListener("input", () => mutateSelected((a) => { a.strokeW = Number(els.insStrokeW.value); }));
-    els.insRadius.addEventListener("input", () => mutateSelected((a) => { a.radius = Number(els.insRadius.value); }));
-    els.insRot.addEventListener("input", () => mutateSelected((a) => { a.rot = (Number(els.insRot.value) * Math.PI) / 180; }));
-    els.insOpacity.addEventListener("input", () => mutateSelected((a) => { a.opacity = Number(els.insOpacity.value) / 100; }));
+    els.insText.addEventListener("input", () => {
+      pushHistory("text");
+      mutateSelected((a) => { a.text = els.insText.value; });
+    });
+    els.insFont.addEventListener("change", () => {
+      pushHistory(null);
+      mutateSelected((a) => { a.font = els.insFont.value; });
+    });
+    els.insSize.addEventListener("input", () => {
+      pushHistory("size");
+      mutateSelected((a) => { a.size = Number(els.insSize.value); });
+    });
+    els.insStrokeW.addEventListener("input", () => {
+      pushHistory("strokeW");
+      mutateSelected((a) => { a.strokeW = Number(els.insStrokeW.value); });
+    });
+    els.insRadius.addEventListener("input", () => {
+      pushHistory("radius");
+      mutateSelected((a) => { a.radius = Number(els.insRadius.value); });
+    });
+    els.insRot.addEventListener("input", () => {
+      pushHistory("rot");
+      mutateSelected((a) => { a.rot = (Number(els.insRot.value) * Math.PI) / 180; });
+    });
+    els.insOpacity.addEventListener("input", () => {
+      pushHistory("opacity");
+      mutateSelected((a) => { a.opacity = Number(els.insOpacity.value) / 100; });
+    });
 
     document.addEventListener("keydown", (e) => {
-      if (!selectedId) return;
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-      if (typing) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === "z") {
+        if (typing) return;
+        e.preventDefault();
+        if (e.shiftKey) redo(); else undo();
+        return;
+      }
+      if (!selectedId || typing) return;
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
         const list = currentAnns();
         const a = selectedAnn();
-        if (a) { list.splice(list.indexOf(a), 1); selectedId = null; refreshEditor(); }
+        if (a) {
+          pushHistory(null);
+          list.splice(list.indexOf(a), 1);
+          selectedId = null;
+          refreshEditor();
+        }
       } else if (e.key === "Escape") {
-        selectedId = null; armTool(null); refreshEditor();
+        selectedId = null; armTool(null); closeColorPop(); refreshEditor();
+      } else if (e.key.startsWith("Arrow")) {
+        // Nudge with arrows; hold Shift for a bigger step.
+        e.preventDefault();
+        const step = (e.shiftKey ? 20 : 4) * overlayScale();
+        pushHistory("nudge");
+        mutateSelected((a) => moveAnn(
+          a,
+          e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0,
+          e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0
+        ));
       }
     });
 
     window.addEventListener("resize", () => drawOverlay());
+    updateHistoryButtons();
   }
 
   // Annotations live in canvas coordinates, so a template switch (portrait A4 →

@@ -78,8 +78,22 @@
         </div>
 
         <div class="editor-bar">
-          <span class="segmented-label">Додати на сторінку</span>
+          <div class="editor-bar-head">
+            <span class="segmented-label">Додати на сторінку</span>
+            <div class="hist-row">
+              <button type="button" class="insp-act" id="undo-btn" title="Скасувати (Ctrl+Z)" aria-label="Скасувати" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/></svg>
+              </button>
+              <button type="button" class="insp-act" id="redo-btn" title="Повернути (Ctrl+Shift+Z)" aria-label="Повернути" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h4"/></svg>
+              </button>
+            </div>
+          </div>
           <div class="tool-row" id="tool-row">
+            <button type="button" class="tool-btn" data-tool="image">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M20 16l-5-5-6.5 8"/></svg>
+              <span>Фото</span>
+            </button>
             <button type="button" class="tool-btn" data-tool="text">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6V4h16v2"/><path d="M12 4v16"/><path d="M9 20h6"/></svg>
               <span>Текст</span>
@@ -153,7 +167,7 @@
           </div>
 
           <div class="insp-row" data-for="text">
-            <label>Накреслення</label>
+            <label>Стиль</label>
             <div class="chip-row">
               <button type="button" class="chip chip-b" data-flag="bold">B</button>
               <button type="button" class="chip chip-i" data-flag="italic">I</button>
@@ -162,7 +176,7 @@
           </div>
 
           <div class="insp-row" data-for="text">
-            <label>Вирівнювання</label>
+            <label>Текст по краю</label>
             <div class="chip-row" id="ins-align">
               <button type="button" class="chip" data-align="left" aria-label="Ліворуч">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h13"/></svg>
@@ -177,54 +191,45 @@
           </div>
 
           <div class="insp-row" data-for="text">
-            <label for="ins-color">Колір тексту</label>
-            <span class="color-ctl"><input type="color" id="ins-color"></span>
+            <label>Колір тексту</label>
+            <button type="button" class="color-btn" data-color="color"></button>
           </div>
 
           <div class="insp-row" data-for="box">
-            <label for="ins-fill">Заливка</label>
-            <span class="color-ctl">
-              <input type="color" id="ins-fill">
-              <button type="button" class="chip chip-none" data-none="fill">без</button>
-            </span>
+            <label>Колір фігури</label>
+            <button type="button" class="color-btn" data-color="fill" data-nullable="1"></button>
           </div>
 
           <div class="insp-row" data-for="text">
-            <label for="ins-bg">Плашка позаду</label>
-            <span class="color-ctl">
-              <input type="color" id="ins-bg">
-              <button type="button" class="chip chip-none" data-none="bg">без</button>
-            </span>
+            <label>Фон під текстом</label>
+            <button type="button" class="color-btn" data-color="bg" data-nullable="1"></button>
           </div>
 
           <div class="insp-row" data-for="box line text">
-            <label for="ins-stroke">Обводка</label>
-            <span class="color-ctl">
-              <input type="color" id="ins-stroke">
-              <button type="button" class="chip chip-none" data-none="stroke">без</button>
-            </span>
+            <label>Колір контуру</label>
+            <button type="button" class="color-btn" data-color="stroke" data-nullable="1"></button>
           </div>
 
           <div class="insp-row" data-for="box line text">
-            <label for="ins-stroke-w">Товщина обводки</label>
+            <label for="ins-stroke-w">Товщина контуру</label>
             <input type="range" id="ins-stroke-w" min="0" max="40" step="1">
             <output id="ins-stroke-w-val" class="insp-out"></output>
           </div>
 
-          <div class="insp-row" data-for="rect">
-            <label for="ins-radius">Заокруглення кутів</label>
+          <div class="insp-row" data-for="rect image">
+            <label for="ins-radius">Круглі кути</label>
             <input type="range" id="ins-radius" min="0" max="200" step="1">
             <output id="ins-radius-val" class="insp-out"></output>
           </div>
 
           <div class="insp-row" data-for="line">
-            <label>Пунктир</label>
+            <label>Пунктирна лінія</label>
             <div class="chip-row">
               <button type="button" class="chip" data-flag="dashed">— — —</button>
             </div>
           </div>
 
-          <div class="insp-row" data-for="box text">
+          <div class="insp-row" data-for="box text image">
             <label for="ins-rot">Поворот</label>
             <input type="range" id="ins-rot" min="-180" max="180" step="1">
             <output id="ins-rot-val" class="insp-out"></output>
@@ -236,7 +241,30 @@
             <output id="ins-opacity-val" class="insp-out"></output>
           </div>
 
-          <div class="insp-swatches" id="ins-swatches" aria-label="Швидкі кольори"></div>
+          <div class="insp-row insp-row-block" data-for="box text image">
+            <label>Розмістити на сторінці</label>
+            <div class="chip-row chip-row-wide" id="ins-place">
+              <button type="button" class="chip" data-place="left" title="До лівого краю" aria-label="До лівого краю">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 3v18"/><rect x="7" y="7" width="12" height="10" rx="1.5"/></svg>
+              </button>
+              <button type="button" class="chip" data-place="centerX" title="По центру горизонтально" aria-label="По центру горизонтально">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18"/><rect x="5" y="7" width="14" height="10" rx="1.5"/></svg>
+              </button>
+              <button type="button" class="chip" data-place="right" title="До правого краю" aria-label="До правого краю">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 3v18"/><rect x="5" y="7" width="12" height="10" rx="1.5"/></svg>
+              </button>
+              <button type="button" class="chip" data-place="top" title="До верхнього краю" aria-label="До верхнього краю">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 4h18"/><rect x="7" y="7" width="10" height="12" rx="1.5"/></svg>
+              </button>
+              <button type="button" class="chip" data-place="centerY" title="По центру вертикально" aria-label="По центру вертикально">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18"/><rect x="7" y="5" width="10" height="14" rx="1.5"/></svg>
+              </button>
+              <button type="button" class="chip" data-place="bottom" title="До нижнього краю" aria-label="До нижнього краю">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 20h18"/><rect x="7" y="5" width="10" height="12" rx="1.5"/></svg>
+              </button>
+              <button type="button" class="chip chip-wide" data-place="middle">У центр</button>
+            </div>
+          </div>
         </div>
 
         <div class="control-block" id="opacity-block">
@@ -277,6 +305,20 @@
     </a>
   </footer>
 </div>
+
+<div id="color-pop" class="color-pop hidden" role="dialog" aria-label="Вибір кольору">
+  <p class="color-pop-title">Кольори бренду</p>
+  <div class="color-pop-grid" id="color-pop-grid"></div>
+  <p class="color-pop-title color-pop-title-recent hidden" id="color-pop-recent-title">Нещодавні</p>
+  <div class="color-pop-grid hidden" id="color-pop-recent"></div>
+  <label class="color-pop-custom">
+    <span>Обрати свій</span>
+    <input type="color" id="color-pop-input">
+  </label>
+  <button type="button" class="color-pop-none hidden" id="color-pop-none">Прибрати колір</button>
+</div>
+
+<input type="file" id="image-input" accept="image/png,image/jpeg,image/webp" hidden>
 
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
