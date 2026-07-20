@@ -1193,6 +1193,20 @@ input[type="range"]:disabled { opacity: 0.5; cursor: default; }
 .insp-row-block { flex-direction: column; align-items: stretch; gap: 8px; }
 .insp-row-block > label { min-width: 0; }
 
+.crop-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  background: var(--cream-d);
+  border-radius: var(--r-s);
+  padding: 12px 14px 14px;
+}
+
+.crop-actions { display: flex; gap: 6px; }
+
+.editor-overlay.crop-mode { cursor: grab; }
+.editor-overlay.crop-mode:active { cursor: grabbing; }
+
 .editor-bar-head {
   display: flex;
   align-items: center;
@@ -1235,6 +1249,19 @@ input[type="range"]:disabled { opacity: 0.5; cursor: default; }
 .chip-u { text-decoration: underline; }
 .chip-none { font-size: 11px; }
 
+/* iOS Safari zooms the whole page when you focus a field smaller than 16px
+   (it ignores maximum-scale), which reads as the layout "jumping". Keep every
+   real text input at 16px on touch devices — sliders/selects are unaffected. */
+@media (pointer: coarse) {
+  .insp-textarea,
+  .insp-select,
+  .job-name,
+  input[type="text"],
+  textarea {
+    font-size: 16px;
+  }
+}
+
 @media (max-width: 480px) {
   .panel { padding: 20px; border-radius: 20px; }
   .dropzone { padding: 34px 14px; }
@@ -1242,4 +1269,8 @@ input[type="range"]:disabled { opacity: 0.5; cursor: default; }
   .insp-row { flex-wrap: wrap; gap: 7px; }
   .insp-row > label { min-width: 92px; }
   .tool-btn { min-width: 0; flex-basis: calc(33.333% - 5px); font-size: 11px; }
+  /* The preview doubles as the editing surface — give it the width back. */
+  .preview-wrap { padding: 10px; }
+  #preview-prev { left: 2px; }
+  #preview-next { right: 2px; }
 }

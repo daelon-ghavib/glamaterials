@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
-<title>GlaMaterials — водяний знак GlamEng</title>
-<meta name="description" content="Накладаєш фірмовий водяний знак GlamEng на PDF або фото за пару секунд. Все відбувається прямо в браузері — файли нікуди не завантажуються.">
+<title>GlaMaterials</title>
+<meta name="description" content="Брендуєш і редагуєш PDF та фото за пару секунд. Все відбувається прямо в браузері — файли нікуди не завантажуються.">
 
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#3D1F2D">
@@ -118,6 +118,21 @@
           <p class="editor-hint" id="editor-hint">Обери інструмент і намалюй просто на сторінці. Клікни по елементу, щоб змінити його.</p>
         </div>
 
+        <div class="crop-bar hidden" id="crop-bar">
+          <div class="editor-bar-head">
+            <span class="segmented-label">Кадрування фото</span>
+            <button type="button" class="chip" id="crop-toggle">Посунути фото</button>
+          </div>
+          <div class="insp-row">
+            <label for="crop-zoom">Масштаб</label>
+            <input type="range" id="crop-zoom" min="100" max="300" step="1" value="100">
+            <output id="crop-zoom-val" class="insp-out">100%</output>
+          </div>
+          <div class="crop-actions">
+            <button type="button" class="chip" id="crop-reset">Скинути кадр</button>
+          </div>
+        </div>
+
         <div class="preview-wrap">
           <button id="preview-prev" class="preview-nav-btn hidden" type="button" aria-label="Попередня сторінка">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
@@ -203,6 +218,29 @@
           <div class="insp-row" data-for="text">
             <label>Фон під текстом</label>
             <button type="button" class="color-btn" data-color="bg" data-nullable="1"></button>
+          </div>
+
+          <div class="insp-row" data-for="bg">
+            <label for="ins-bg-pad">Поля фону</label>
+            <input type="range" id="ins-bg-pad" min="0" max="150" step="1">
+            <output id="ins-bg-pad-val" class="insp-out"></output>
+          </div>
+
+          <div class="insp-row" data-for="bg">
+            <label for="ins-bg-radius">Круглі кути фону</label>
+            <input type="range" id="ins-bg-radius" min="0" max="200" step="1">
+            <output id="ins-bg-radius-val" class="insp-out"></output>
+          </div>
+
+          <div class="insp-row" data-for="bg">
+            <label>Контур фону</label>
+            <button type="button" class="color-btn" data-color="bgStroke" data-nullable="1"></button>
+          </div>
+
+          <div class="insp-row" data-for="bg">
+            <label for="ins-bg-stroke-w">Товщина контуру фону</label>
+            <input type="range" id="ins-bg-stroke-w" min="0" max="40" step="1">
+            <output id="ins-bg-stroke-w-val" class="insp-out"></output>
           </div>
 
           <div class="insp-row" data-for="box line text">

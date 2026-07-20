@@ -1,7 +1,7 @@
 {
-  "name": "GlaMaterials — водяний знак GlamEng",
+  "name": "GlaMaterials",
   "short_name": "GlaMaterials",
-  "description": "Накладає водяний знак GlamEng на PDF і фото прямо в браузері.",
+  "description": "Брендування й редагування PDF та фото прямо в браузері.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

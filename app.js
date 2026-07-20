@@ -58,6 +58,11 @@
     insSizeVal: document.getElementById("ins-size-val"),
     insAlign: document.getElementById("ins-align"),
     insPlace: document.getElementById("ins-place"),
+    cropBar: document.getElementById("crop-bar"),
+    cropToggle: document.getElementById("crop-toggle"),
+    cropZoom: document.getElementById("crop-zoom"),
+    cropZoomVal: document.getElementById("crop-zoom-val"),
+    cropReset: document.getElementById("crop-reset"),
     undoBtn: document.getElementById("undo-btn"),
     redoBtn: document.getElementById("redo-btn"),
     imageInput: document.getElementById("image-input"),
@@ -69,6 +74,12 @@
     colorPopNone: document.getElementById("color-pop-none"),
     insStrokeW: document.getElementById("ins-stroke-w"),
     insStrokeWVal: document.getElementById("ins-stroke-w-val"),
+    insBgPad: document.getElementById("ins-bg-pad"),
+    insBgPadVal: document.getElementById("ins-bg-pad-val"),
+    insBgRadius: document.getElementById("ins-bg-radius"),
+    insBgRadiusVal: document.getElementById("ins-bg-radius-val"),
+    insBgStrokeW: document.getElementById("ins-bg-stroke-w"),
+    insBgStrokeWVal: document.getElementById("ins-bg-stroke-w-val"),
     insRadius: document.getElementById("ins-radius"),
     insRadiusVal: document.getElementById("ins-radius-val"),
     insRot: document.getElementById("ins-rot"),
@@ -249,20 +260,31 @@
 
   // 'contain' pads the whole canvas (document template, no cropping).
   // 'cover' fills the template's photo window and crops any overflow (frame template).
-  function placePhoto(ctx, drawable, srcW, srcH) {
+  // Clamped so the photo always covers the window — panning can never expose a gap.
+  function coverPlacement(srcW, srcH, fit) {
+    const rect = tpl().window;
+    const f = fit || {};
+    const zoom = Math.max(1, f.zoom || 1);
+    const scale = Math.max(rect.w / srcW, rect.h / srcH) * zoom;
+    const w = srcW * scale;
+    const h = srcH * scale;
+    const slackX = Math.max(0, (w - rect.w) / 2);
+    const slackY = Math.max(0, (h - rect.h) / 2);
+    const ox = Math.max(-slackX, Math.min(slackX, f.dx || 0));
+    const oy = Math.max(-slackY, Math.min(slackY, f.dy || 0));
+    return { w, h, dx: rect.x + (rect.w - w) / 2 + ox, dy: rect.y + (rect.h - h) / 2 + oy, slackX, slackY };
+  }
+
+  function placePhoto(ctx, drawable, srcW, srcH, fit) {
     const t = tpl();
     if (t.fit === "cover") {
       const rect = t.window;
-      const scale = Math.max(rect.w / srcW, rect.h / srcH);
-      const w = srcW * scale;
-      const h = srcH * scale;
-      const dx = rect.x + (rect.w - w) / 2;
-      const dy = rect.y + (rect.h - h) / 2;
+      const pl = coverPlacement(srcW, srcH, fit);
       ctx.save();
       ctx.beginPath();
       ctx.rect(rect.x, rect.y, rect.w, rect.h);
       ctx.clip();
-      ctx.drawImage(drawable, dx, dy, w, h);
+      ctx.drawImage(drawable, pl.dx, pl.dy, pl.w, pl.h);
       ctx.restore();
     } else {
       const scale = Math.min(t.canvasW / srcW, t.canvasH / srcH);
@@ -322,7 +344,7 @@
     });
   }
 
-  async function renderImageFile(file) {
+  async function renderImageFile(file, job) {
     let sourceBlob = file;
     if (isHeic(file)) {
       await loadScriptOnce("vendor/heic2any.min.js");
@@ -330,9 +352,22 @@
       sourceBlob = Array.isArray(result) ? result[0] : result;
     }
     const img = await loadImageFromBlob(sourceBlob);
+    // Keep the decoded source around so re-cropping doesn't decode again.
+    if (job) { job.srcImg = img; job.srcW = img.naturalWidth; job.srcH = img.naturalHeight; }
     const { canvas, ctx } = makeBaseCanvas();
-    placePhoto(ctx, img, img.naturalWidth, img.naturalHeight);
+    placePhoto(ctx, img, img.naturalWidth, img.naturalHeight, job && job.fit);
     return [await canvasToJpegBlob(canvas)];
+  }
+
+  // Re-bake a photo job's page after its crop changed.
+  async function rerenderJobPhoto(job) {
+    if (!job || !job.srcImg) return;
+    const { canvas, ctx } = makeBaseCanvas();
+    placePhoto(ctx, job.srcImg, job.srcW, job.srcH, job.fit);
+    job.pages = [await canvasToJpegBlob(canvas)];
+    job.thumbUrl = await makeThumbDataUrl(job.pages[0]);
+    renderJobList();
+    updatePreview();
   }
 
   async function makeThumbDataUrl(blob, maxDim) {
@@ -370,7 +405,7 @@
               job.progressLabel = done + "/" + total + " стор.";
               renderJobList();
             })
-          : await renderImageFile(job.file);
+          : await renderImageFile(job.file, job);
         if (!jobs.includes(job)) continue;
         if (!pages.length) throw new Error("no-pages");
         job.pages = pages;
@@ -387,6 +422,7 @@
       renderJobList();
       updateSettingsVisibility();
       updatePreview();
+      updateCropBar();
     }
     isProcessingQueue = false;
   }
@@ -419,6 +455,8 @@
         thumbUrl: null,
         progressLabel: "",
         errorMsg: "",
+        fit: { zoom: 1, dx: 0, dy: 0 }, // manual crop inside the frame window
+        srcImg: null, srcW: 0, srcH: 0,
       };
       jobs.push(job);
       enqueueJob(job);
@@ -688,6 +726,18 @@
     { label: "Courier New", css: "'Courier New', Courier, monospace" },
     { label: "Impact", css: "Impact, 'Arial Black', sans-serif" },
     { label: "Comic Sans MS", css: "'Comic Sans MS', 'Comic Sans', cursive" },
+    // Second block: faces that ship with macOS/iOS (this app's main devices),
+    // each with a fallback chain so other platforms still get something close.
+    { label: "Avenir Next", css: "'Avenir Next', Avenir, 'Segoe UI', sans-serif" },
+    { label: "Futura", css: "Futura, 'Century Gothic', 'Trebuchet MS', sans-serif" },
+    { label: "Optima", css: "Optima, Candara, 'Gill Sans', sans-serif" },
+    { label: "Gill Sans", css: "'Gill Sans', 'Gill Sans MT', Calibri, sans-serif" },
+    { label: "Tahoma", css: "Tahoma, Geneva, Verdana, sans-serif" },
+    { label: "Palatino", css: "Palatino, 'Palatino Linotype', 'Book Antiqua', serif" },
+    { label: "Baskerville", css: "Baskerville, 'Baskerville Old Face', Garamond, serif" },
+    { label: "Didot", css: "Didot, 'Bodoni MT', 'Playfair Display', Georgia, serif" },
+    { label: "American Typewriter", css: "'American Typewriter', 'Courier New', serif" },
+    { label: "Snell Roundhand — рукопис", css: "'Snell Roundhand', 'Brush Script MT', 'Segoe Script', cursive" },
   ];
 
   const SWATCHES = [
@@ -842,9 +892,19 @@
     ctx.textAlign = a.align || "left";
 
     if (a.bg) {
-      const pad = a.size * 0.24;
+      // The plate behaves like a rectangle behind the text: its own padding,
+      // corner radius and outline, independent of the glyph contour.
+      const pad = a.size * (a.bgPad == null ? 0.24 : a.bgPad);
+      const bx = a.x - pad, by = a.y - pad;
+      const bw = a.w + pad * 2, bh = a.h + pad * 2;
+      pathRoundRect(ctx, bx, by, bw, bh, a.bgRadius || 0);
       ctx.fillStyle = a.bg;
-      ctx.fillRect(a.x - pad, a.y - pad, a.w + pad * 2, a.h + pad * 2);
+      ctx.fill();
+      if (a.bgStroke && a.bgStrokeW > 0) {
+        ctx.lineWidth = a.bgStrokeW;
+        ctx.strokeStyle = a.bgStroke;
+        ctx.stroke();
+      }
     }
 
     const anchorX = a.align === "center" ? a.x + a.w / 2 : a.align === "right" ? a.x + a.w : a.x;
@@ -1195,7 +1255,8 @@
       return {
         text: "Твій текст", font: FONTS[0].css, size: Math.round(base * 0.05),
         bold: true, italic: false, underline: false, align: "left",
-        color: "#3D1F2D", stroke: null, strokeW: 0, bg: null, rot: 0, opacity: 1,
+        color: "#3D1F2D", stroke: null, strokeW: 0, rot: 0, opacity: 1,
+        bg: null, bgPad: 0.24, bgRadius: Math.round(base * 0.012), bgStroke: null, bgStrokeW: 0,
       };
     }
     if (type === "rect" || type === "ellipse") {
@@ -1231,6 +1292,78 @@
   function refreshEditor() {
     updatePreview();
     renderInspector();
+    updateCropBar();
+  }
+
+  // ----- manual photo crop (frame template) -----
+
+  let cropMode = false;
+
+  // The job whose photo the current preview page came from.
+  function currentPhotoJob() {
+    const key = currentKey();
+    if (!key) return null;
+    const jobId = Number(key.slice(0, key.indexOf(":")));
+    const job = jobs.find((j) => j.id === jobId);
+    return job && job.srcImg ? job : null;
+  }
+
+  function cropAvailable() {
+    return activeTemplate === "frame" && !!currentPhotoJob();
+  }
+
+  function setCropMode(on) {
+    const job = currentPhotoJob();
+    cropMode = !!on && !!job;
+    els.cropToggle.classList.toggle("on", cropMode);
+    els.cropToggle.textContent = cropMode ? "Готово" : "Посунути фото";
+    els.editorOverlay.classList.toggle("crop-mode", cropMode);
+    if (cropMode) {
+      selectedId = null;
+      armTool(null);
+      renderInspector();
+      drawOverlay();
+    }
+  }
+
+  function updateCropBar() {
+    const show = cropAvailable();
+    els.cropBar.classList.toggle("hidden", !show);
+    if (!show) {
+      if (cropMode) setCropMode(false);
+      return;
+    }
+    const job = currentPhotoJob();
+    const z = Math.round((job.fit.zoom || 1) * 100);
+    els.cropZoom.value = z;
+    els.cropZoomVal.value = z + "%";
+  }
+
+  // Repaint the cached page composite in place so panning feels immediate;
+  // the page blob itself is re-baked once on release.
+  function paintCropPreview(job) {
+    const t = tpl();
+    const ref = currentRef();
+    if (!ref) return;
+    previewWorkCanvas.width = t.canvasW;
+    previewWorkCanvas.height = t.canvasH;
+    const ctx = previewWorkCanvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, t.canvasW, t.canvasH);
+    placePhoto(ctx, job.srcImg, job.srcW, job.srcH, job.fit);
+    ctx.drawImage(overlayImg(), 0, 0, t.canvasW, t.canvasH);
+    previewBase = { blob: ref.blob, opacity: 1, w: t.canvasW, h: t.canvasH };
+
+    els.previewCanvas.width = t.canvasW;
+    els.previewCanvas.height = t.canvasH;
+    const pctx = els.previewCanvas.getContext("2d");
+    pctx.drawImage(previewWorkCanvas, 0, 0);
+    drawAnnotations(pctx, annsFor(ref.key));
+  }
+
+  function commitCrop(job) {
+    previewBase = { blob: null, opacity: null, w: 0, h: 0 }; // force a clean recomposite
+    rerenderJobPhoto(job);
   }
 
   // ----- pointer interaction -----
@@ -1257,6 +1390,12 @@
     if (!currentKey()) return;
     const p = evtPoint(e);
     try { els.editorOverlay.setPointerCapture(e.pointerId); } catch (err) { /* no capture on this pointer */ }
+
+    if (cropMode) {
+      const job = currentPhotoJob();
+      if (job) drag = { mode: "crop", jobId: job.id, px: p.x, py: p.y, ox: job.fit.dx, oy: job.fit.dy };
+      return;
+    }
 
     if (armedTool) {
       const t = tpl();
@@ -1319,6 +1458,15 @@
 
   function onPointerMove(e) {
     if (!drag) return;
+    if (drag.mode === "crop") {
+      const job = jobs.find((j) => j.id === drag.jobId);
+      if (!job) { drag = null; return; }
+      const p = evtPoint(e);
+      job.fit.dx = drag.ox + (p.x - drag.px);
+      job.fit.dy = drag.oy + (p.y - drag.py);
+      paintCropPreview(job);
+      return;
+    }
     const list = currentAnns();
     const a = list.find((x) => x.id === drag.id);
     if (!a) { drag = null; return; }
@@ -1376,6 +1524,12 @@
       if (activeGuides.length) { activeGuides = []; drawOverlay(); }
       return;
     }
+    if (drag.mode === "crop") {
+      const job = jobs.find((j) => j.id === drag.jobId);
+      drag = null;
+      if (job) commitCrop(job);
+      return;
+    }
     const a = currentAnns().find((x) => x.id === drag.id);
     if (a) {
       if (drag.mode === "create" && isLine(a) && dist({ x: a.x1, y: a.y1 }, { x: a.x2, y: a.y2 }) < 6) {
@@ -1392,7 +1546,8 @@
   // ----- inspector -----
 
   function tokensFor(a) {
-    if (a.type === "text") return ["text", "all"];
+    // Plate settings only make sense once the text actually has a plate.
+    if (a.type === "text") return a.bg ? ["text", "bg", "all"] : ["text", "all"];
     if (a.type === "rect") return ["box", "rect", "all"];
     if (a.type === "ellipse") return ["box", "all"];
     if (a.type === "image") return ["image", "all"];
@@ -1407,6 +1562,15 @@
   // ----- colour popover -----
 
   let colorPopProp = null;
+
+  // Picking an outline colour while its width is 0 would look like nothing
+  // happened, so give it a visible default the first time.
+  function applyDefaultStrokeWidth(a, hex) {
+    if (!hex) return;
+    const w = Math.max(2, Math.round(Math.min(tpl().canvasW, tpl().canvasH) * 0.005));
+    if (colorPopProp === "stroke" && !a.strokeW) a.strokeW = w;
+    if (colorPopProp === "bgStroke" && !a.bgStrokeW) a.bgStrokeW = w;
+  }
 
   function loadRecentColors() {
     try {
@@ -1464,9 +1628,7 @@
       if (!sel) return;
       sel[colorPopProp] = hex;
       // Giving a shape an outline colour with zero width would look like nothing happened.
-      if (colorPopProp === "stroke" && hex && !sel.strokeW) {
-        sel.strokeW = Math.max(2, Math.round(Math.min(tpl().canvasW, tpl().canvasH) * 0.005));
-      }
+      applyDefaultStrokeWidth(sel, hex);
       rememberColor(hex);
       closeColorPop();
       refreshEditor();
@@ -1531,6 +1693,15 @@
       els.insSizeVal.value = a.size;
       setChip("bold", a.bold); setChip("italic", a.italic); setChip("underline", a.underline);
       els.insAlign.querySelectorAll(".chip").forEach((b) => b.classList.toggle("on", b.dataset.align === a.align));
+      if (a.bg) {
+        const padPct = Math.round((a.bgPad == null ? 0.24 : a.bgPad) * 100);
+        els.insBgPad.value = padPct;
+        els.insBgPadVal.value = padPct + "%";
+        els.insBgRadius.value = a.bgRadius || 0;
+        els.insBgRadiusVal.value = a.bgRadius || 0;
+        els.insBgStrokeW.value = a.bgStrokeW || 0;
+        els.insBgStrokeWVal.value = a.bgStrokeW || 0;
+      }
     }
     if (a.type === "rect" || a.type === "image") {
       els.insRadius.value = a.radius || 0;
@@ -1613,6 +1784,27 @@
 
     els.undoBtn.addEventListener("click", undo);
     els.redoBtn.addEventListener("click", redo);
+
+    els.cropToggle.addEventListener("click", () => setCropMode(!cropMode));
+    els.cropZoom.addEventListener("input", () => {
+      const job = currentPhotoJob();
+      if (!job) return;
+      job.fit.zoom = Number(els.cropZoom.value) / 100;
+      els.cropZoomVal.value = els.cropZoom.value + "%";
+      paintCropPreview(job);
+    });
+    els.cropZoom.addEventListener("change", () => {
+      const job = currentPhotoJob();
+      if (job) commitCrop(job);
+    });
+    els.cropReset.addEventListener("click", () => {
+      const job = currentPhotoJob();
+      if (!job) return;
+      job.fit = { zoom: 1, dx: 0, dy: 0 };
+      els.cropZoom.value = 100;
+      els.cropZoomVal.value = "100%";
+      commitCrop(job);
+    });
 
     els.insPlace.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-place]");
@@ -1699,6 +1891,18 @@
     els.insRadius.addEventListener("input", () => {
       pushHistory("radius");
       mutateSelected((a) => { a.radius = Number(els.insRadius.value); });
+    });
+    els.insBgPad.addEventListener("input", () => {
+      pushHistory("bgPad");
+      mutateSelected((a) => { a.bgPad = Number(els.insBgPad.value) / 100; });
+    });
+    els.insBgRadius.addEventListener("input", () => {
+      pushHistory("bgRadius");
+      mutateSelected((a) => { a.bgRadius = Number(els.insBgRadius.value); });
+    });
+    els.insBgStrokeW.addEventListener("input", () => {
+      pushHistory("bgStrokeW");
+      mutateSelected((a) => { a.bgStrokeW = Number(els.insBgStrokeW.value); });
     });
     els.insRot.addEventListener("input", () => {
       pushHistory("rot");
