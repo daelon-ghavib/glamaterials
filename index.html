@@ -77,15 +77,166 @@
           </div>
         </div>
 
+        <div class="editor-bar">
+          <span class="segmented-label">Додати на сторінку</span>
+          <div class="tool-row" id="tool-row">
+            <button type="button" class="tool-btn" data-tool="text">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6V4h16v2"/><path d="M12 4v16"/><path d="M9 20h6"/></svg>
+              <span>Текст</span>
+            </button>
+            <button type="button" class="tool-btn" data-tool="rect">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/></svg>
+              <span>Прямокутник</span>
+            </button>
+            <button type="button" class="tool-btn" data-tool="ellipse">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="12" rx="8.5" ry="6.5"/></svg>
+              <span>Овал</span>
+            </button>
+            <button type="button" class="tool-btn" data-tool="line">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19L20 5"/></svg>
+              <span>Лінія</span>
+            </button>
+            <button type="button" class="tool-btn" data-tool="arrow">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19L20 5"/><path d="M20 12V5h-7"/></svg>
+              <span>Стрілка</span>
+            </button>
+          </div>
+          <p class="editor-hint" id="editor-hint">Обери інструмент і намалюй просто на сторінці. Клікни по елементу, щоб змінити його.</p>
+        </div>
+
         <div class="preview-wrap">
           <button id="preview-prev" class="preview-nav-btn hidden" type="button" aria-label="Попередня сторінка">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
           </button>
-          <canvas id="preview-canvas" class="preview-canvas"></canvas>
+          <div class="preview-stage" id="preview-stage">
+            <canvas id="preview-canvas" class="preview-canvas"></canvas>
+            <canvas id="editor-overlay" class="editor-overlay"></canvas>
+          </div>
           <button id="preview-next" class="preview-nav-btn hidden" type="button" aria-label="Наступна сторінка">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
           </button>
           <span id="page-count-badge" class="page-count-badge"></span>
+        </div>
+
+        <div id="inspector" class="inspector hidden">
+          <div class="inspector-head">
+            <span id="inspector-title">Елемент</span>
+            <div class="inspector-acts">
+              <button type="button" class="insp-act" data-act="dup" title="Дублювати" aria-label="Дублювати">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
+              </button>
+              <button type="button" class="insp-act" data-act="back" title="Опустити нижче" aria-label="Опустити нижче">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M6 13l6 6 6-6"/></svg>
+              </button>
+              <button type="button" class="insp-act" data-act="front" title="Підняти вище" aria-label="Підняти вище">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>
+              </button>
+              <button type="button" class="insp-act insp-act-del" data-act="del" title="Видалити" aria-label="Видалити">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6 7l1 13h10l1-13"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="insp-row" data-for="text">
+            <textarea id="ins-text" class="insp-textarea" rows="2" placeholder="Введи текст…"></textarea>
+          </div>
+
+          <div class="insp-row" data-for="text">
+            <label for="ins-font">Шрифт</label>
+            <select id="ins-font" class="insp-select"></select>
+          </div>
+
+          <div class="insp-row" data-for="text">
+            <label for="ins-size">Розмір</label>
+            <input type="range" id="ins-size" min="10" max="320" step="1">
+            <output id="ins-size-val" class="insp-out"></output>
+          </div>
+
+          <div class="insp-row" data-for="text">
+            <label>Накреслення</label>
+            <div class="chip-row">
+              <button type="button" class="chip chip-b" data-flag="bold">B</button>
+              <button type="button" class="chip chip-i" data-flag="italic">I</button>
+              <button type="button" class="chip chip-u" data-flag="underline">U</button>
+            </div>
+          </div>
+
+          <div class="insp-row" data-for="text">
+            <label>Вирівнювання</label>
+            <div class="chip-row" id="ins-align">
+              <button type="button" class="chip" data-align="left" aria-label="Ліворуч">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h13"/></svg>
+              </button>
+              <button type="button" class="chip" data-align="center" aria-label="По центру">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M6 18h12"/></svg>
+              </button>
+              <button type="button" class="chip" data-align="right" aria-label="Праворуч">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M10 12h10M7 18h13"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="insp-row" data-for="text">
+            <label for="ins-color">Колір тексту</label>
+            <span class="color-ctl"><input type="color" id="ins-color"></span>
+          </div>
+
+          <div class="insp-row" data-for="box">
+            <label for="ins-fill">Заливка</label>
+            <span class="color-ctl">
+              <input type="color" id="ins-fill">
+              <button type="button" class="chip chip-none" data-none="fill">без</button>
+            </span>
+          </div>
+
+          <div class="insp-row" data-for="text">
+            <label for="ins-bg">Плашка позаду</label>
+            <span class="color-ctl">
+              <input type="color" id="ins-bg">
+              <button type="button" class="chip chip-none" data-none="bg">без</button>
+            </span>
+          </div>
+
+          <div class="insp-row" data-for="box line text">
+            <label for="ins-stroke">Обводка</label>
+            <span class="color-ctl">
+              <input type="color" id="ins-stroke">
+              <button type="button" class="chip chip-none" data-none="stroke">без</button>
+            </span>
+          </div>
+
+          <div class="insp-row" data-for="box line text">
+            <label for="ins-stroke-w">Товщина обводки</label>
+            <input type="range" id="ins-stroke-w" min="0" max="40" step="1">
+            <output id="ins-stroke-w-val" class="insp-out"></output>
+          </div>
+
+          <div class="insp-row" data-for="rect">
+            <label for="ins-radius">Заокруглення кутів</label>
+            <input type="range" id="ins-radius" min="0" max="200" step="1">
+            <output id="ins-radius-val" class="insp-out"></output>
+          </div>
+
+          <div class="insp-row" data-for="line">
+            <label>Пунктир</label>
+            <div class="chip-row">
+              <button type="button" class="chip" data-flag="dashed">— — —</button>
+            </div>
+          </div>
+
+          <div class="insp-row" data-for="box text">
+            <label for="ins-rot">Поворот</label>
+            <input type="range" id="ins-rot" min="-180" max="180" step="1">
+            <output id="ins-rot-val" class="insp-out"></output>
+          </div>
+
+          <div class="insp-row" data-for="all">
+            <label for="ins-opacity">Прозорість</label>
+            <input type="range" id="ins-opacity" min="10" max="100" step="1">
+            <output id="ins-opacity-val" class="insp-out"></output>
+          </div>
+
+          <div class="insp-swatches" id="ins-swatches" aria-label="Швидкі кольори"></div>
         </div>
 
         <div class="control-block" id="opacity-block">
